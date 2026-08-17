@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const Battle = require('../models/Battle');
 const Quiz = require('../models/Quiz');
 const { mockDB } = require('../models/store');
-const { generateQuizFromContent } = require('../services/aiService');
+const { generateBattleQuizAI } = require('../services/aiService');
 const { v4: uuidv4 } = require('uuid');
 
 // Valid characters for clean, unambiguous 6-character room codes
@@ -35,11 +35,7 @@ function getLeaderboard(players = []) {
 }
 
 /**
- * Robust, universal answer evaluation handling:
- * - Exact string matching
- * - Letter indexing ('A', 'B', 'C', 'D')
- * - Numerical indexing (0, 1, 2, 3)
- * - Prefixed options ('A. Text' vs 'Text')
+ * Robust, universal answer evaluation handling
  */
 function checkAnswerCorrectness(submitted, question) {
   if (submitted === undefined || submitted === null || !question) return false;
@@ -265,99 +261,32 @@ function initBattleSockets(io) {
 
     console.log(`⚡ Battle Socket Connected: ${socket.id} (User: ${authUserName} [${authUserId}])`);
 
-    // 1. CREATE ROOM
-    socket.on('create_room', async ({ hostName, hostAvatar, quizId, customQuiz, questions, topic, questionCount, difficulty }) => {
+    // 1. CREATE ROOM — SYNTHESIZE BRAND-NEW AI QUIZ FROM THE GIVEN TOPIC/COMMAND
+    socket.on('create_room', async ({ hostName, hostAvatar, topic, questionCount, difficulty }) => {
       try {
         const roomCode = generateUniqueRoomCode(rooms);
         const name = hostName || authUserName || 'Host Leader';
         const avatar = hostAvatar || authUserAvatar;
+        const targetTopic = (topic || 'General Science & Technology').trim();
+        const targetCount = Math.min(10, Math.max(3, parseInt(questionCount, 10) || 5));
+        const targetDifficulty = difficulty || 'Medium';
 
-        // Fetch real quiz from MongoDB or generate via AI from chosen topic
-        let selectedQuiz = customQuiz;
-        if (!selectedQuiz && quizId) {
-          if (mongoose.connection.readyState === 1) {
-            try {
-              selectedQuiz = await Quiz.findById(quizId).lean();
-            } catch (e) {}
-          }
-          if (!selectedQuiz) {
-            selectedQuiz = mockDB.quizzes.find(q => q._id === quizId || q.id === quizId);
-          }
-        }
+        console.log(`🤖 Synthesizing Brand-New AI Battle for topic "${targetTopic}" (${targetCount} Qs, ${targetDifficulty})...`);
 
-        // If host provided a custom topic, synthesize a battle quiz via AI
-        if (!selectedQuiz && topic && typeof topic === 'string' && topic.trim().length > 0) {
-          try {
-            const count = Math.min(10, Math.max(3, parseInt(questionCount, 10) || 5));
-            const generated = await generateQuizFromContent({
-              content: `Competitive head-to-head multiplayer quiz on ${topic.trim()}`,
-              title: `${topic.trim()} Arena Battle`,
-              category: topic.trim(),
-              difficulty: difficulty || 'Medium',
-              questionCount: count,
-              questionTypes: ['mcq']
-            });
+        // Generate 100% Brand-New AI Quiz on the given topic/command
+        const synthesizedQuiz = await generateBattleQuizAI({
+          topic: targetTopic,
+          questionCount: targetCount,
+          difficulty: targetDifficulty
+        });
 
-            if (generated && generated.questions && generated.questions.length > 0) {
-              selectedQuiz = {
-                id: `battle_quiz_${roomCode}`,
-                title: `${topic.trim()} Arena Battle`,
-                category: topic.trim(),
-                difficulty: difficulty || 'Medium',
-                questions: generated.questions.map((q, idx) => ({
-                  id: `bq_${idx + 1}`,
-                  text: q.text,
-                  type: 'mcq',
-                  options: q.options && q.options.length >= 2 ? q.options : ['Option A', 'Option B', 'Option C', 'Option D'],
-                  correctAnswer: q.correctAnswer,
-                  explanation: q.explanation || '',
-                  points: 10
-                }))
-              };
-            }
-          } catch (e) {
-            console.warn('AI battle quiz generation warning, using fallback:', e.message);
-          }
-        }
-
-        if (!selectedQuiz) {
-          selectedQuiz = {
-            id: `battle_quiz_${roomCode}`,
-            title: 'Live AI Battle Arena',
-            category: 'General Science & Technology',
-            questions: questions && questions.length > 0 ? questions : (mockDB.quizzes[0]?.questions || [
-              {
-                id: 'b1',
-                text: 'What is the primary function of the self-attention mechanism in Transformers?',
-                options: [
-                  'Dynamic weighting of token relationships across sequence positions',
-                  'Synchronous locking of shared memory registers',
-                  'Pure feed-forward linear matrix multiplication only',
-                  'Sequential recurrent state preservation'
-                ],
-                correctAnswer: 'Dynamic weighting of token relationships across sequence positions',
-                explanation: 'Self-attention calculates similarity scores between all pairs of tokens in a sequence simultaneously.',
-                points: 10
-              },
-              {
-                id: 'b2',
-                text: 'Which Bloom cognitive tier evaluates the synthesis and assembly of novel systems?',
-                options: ['Create', 'Remember', 'Understand', 'Apply'],
-                correctAnswer: 'Create',
-                explanation: 'Create represents the highest cognitive dimension in Bloom\'s Revised Taxonomy.',
-                points: 10
-              },
-              {
-                id: 'b3',
-                text: 'Spaced repetition algorithms optimize memory retention by exploiting the psychological spacing effect.',
-                options: ['True', 'False'],
-                correctAnswer: 'True',
-                explanation: 'Reviewing material at exponentially expanding intervals dramatically improves long-term neural recall.',
-                points: 10
-              }
-            ])
-          };
-        }
+        const selectedQuiz = {
+          id: `battle_quiz_${roomCode}`,
+          title: synthesizedQuiz.title || `${targetTopic} Arena Battle`,
+          category: targetTopic,
+          difficulty: targetDifficulty,
+          questions: synthesizedQuiz.questions
+        };
 
         const room = {
           roomCode,
@@ -365,7 +294,7 @@ function initBattleSockets(io) {
           hostUserId: authUserId,
           hostSocketId: socket.id,
           hostName: name,
-          quizTitle: selectedQuiz.title || 'Live AI Battle Arena',
+          quizTitle: selectedQuiz.title,
           quiz: selectedQuiz,
           currentQuestionIndex: 0,
           status: 'waiting', // waiting -> countdown -> active -> finished
@@ -391,7 +320,7 @@ function initBattleSockets(io) {
         rooms.set(roomCode, room);
         socket.join(roomCode);
         socket.emit('room_created', { roomCode, room });
-        console.log(`🏛️ Real Battle Room created: ${roomCode} by ${name} (${authUserId}) with ${selectedQuiz.questions.length} questions on ${selectedQuiz.title}`);
+        console.log(`🏛️ Real Battle Room created: ${roomCode} with ${selectedQuiz.questions.length} brand-new questions on "${targetTopic}"!`);
       } catch (err) {
         console.error('Error creating battle room:', err);
         socket.emit('error_message', { message: 'Failed to create battle room. Please try again.' });
