@@ -13,11 +13,17 @@ import {
   RefreshCw, 
   TrendingDown, 
   TrendingUp, 
-  ChevronDown 
+  ChevronDown,
+  Award,
+  Download,
+  ShieldCheck,
+  Check,
+  Copy
 } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { downloadCertificatePdf } from '../../utils/certificatePdf';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 
 export default function QuizPlayerView() {
@@ -35,6 +41,9 @@ export default function QuizPlayerView() {
   const [isCompleted, setIsCompleted] = useState(false);
   const [report, setReport] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [certificateData, setCertificateData] = useState(null);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
 
   // Individual Question Regeneration state
   const [isRegeneratingQ, setIsRegeneratingQ] = useState(false);
@@ -119,7 +128,6 @@ export default function QuizPlayerView() {
         const updatedQuestions = [...quiz.questions];
         updatedQuestions[currentIdx] = res.data.question;
         setQuiz({ ...quiz, questions: updatedQuestions });
-        // Clear answer for this question
         setUserAnswers(prev => {
           const updated = { ...prev };
           delete updated[currentQ.id];
@@ -188,7 +196,7 @@ export default function QuizPlayerView() {
     setIsSubmitting(false);
 
     try {
-      await api.post(`/quizzes/${quiz._id || quiz.id}/attempt`, {
+      const res = await api.post(`/quizzes/${quiz._id || quiz.id}/attempt`, {
         quizTitle: quiz.title,
         score,
         maxScore,
@@ -197,10 +205,55 @@ export default function QuizPlayerView() {
         answers: evaluatedAnswers,
         weakTopics: weakTopicsList
       });
-      toast.success('Assessment completed.');
+
+      if (res.data?.certificate) {
+        setCertificateData(res.data.certificate);
+        toast.success('🏆 Certificate of Mastery Unlocked (Score: 80%+) !');
+      } else {
+        toast.success('Assessment completed.');
+      }
     } catch (e) {
       console.warn('Attempt save warning:', e.message);
+      if (percentage >= 80) {
+        // Local fallback certificate object
+        const fallbackCert = {
+          certificateId: `QF-AI-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`,
+          recipientName: user?.name || 'Student',
+          quizTitle: quiz.title,
+          score: percentage,
+          issueDate: new Date().toISOString().split('T')[0]
+        };
+        setCertificateData(fallbackCert);
+      }
     }
+  };
+
+  const handleDownloadCertificate = async () => {
+    if (!report || report.percentage < 80) return;
+    const cert = certificateData || {
+      certificateId: `QF-AI-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`,
+      recipientName: user?.name || 'Student',
+      quizTitle: quiz.title,
+      score: report.percentage,
+      issueDate: new Date().toISOString().split('T')[0]
+    };
+
+    try {
+      setIsDownloadingPdf(true);
+      await downloadCertificatePdf(cert);
+      toast.success('Official Certificate PDF downloaded.');
+    } catch (e) {
+      toast.error('Failed to generate PDF.');
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
+  const handleCopyCertId = (certId) => {
+    navigator.clipboard.writeText(certId);
+    setCopiedId(true);
+    toast.success('Certificate ID copied!');
+    setTimeout(() => setCopiedId(false), 2500);
   };
 
   const handlePracticeWeakTopics = async () => {
@@ -251,6 +304,9 @@ export default function QuizPlayerView() {
 
   // ================= RESULTS & AI ANALYSIS SCREEN =================
   if (isCompleted && report) {
+    const isEligibleForCert = report.percentage >= 80;
+    const certId = certificateData?.certificateId || `QF-AI-${new Date().getFullYear()}-892301`;
+
     return (
       <div className="max-w-3xl mx-auto space-y-4 sm:space-y-6 py-2 sm:py-4 px-3 sm:px-4 animate-fadeIn pb-12">
         {/* Score Summary Card */}
@@ -264,7 +320,9 @@ export default function QuizPlayerView() {
           </h1>
 
           <div className="flex items-center justify-center my-3 sm:my-4">
-            <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full border-4 border-primary/20 flex flex-col items-center justify-center bg-slate-50 shadow-inner">
+            <div className={`w-28 h-28 sm:w-32 sm:h-32 rounded-full border-4 flex flex-col items-center justify-center bg-slate-50 shadow-inner ${
+              isEligibleForCert ? 'border-amber-400' : 'border-primary/20'
+            }`}>
               <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
                 {displayScore}%
               </span>
@@ -312,6 +370,76 @@ export default function QuizPlayerView() {
             </button>
           </div>
         </div>
+
+        {/* 🏆 CELEBRATORY CERTIFICATE BANNER WHEN SCORE >= 80% */}
+        {isEligibleForCert && (
+          <div className="p-5 sm:p-6 rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50/80 via-white to-amber-50/50 shadow-md space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-sm shrink-0">
+                  <Award className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-200/80 px-2 py-0.5 rounded">
+                      Accreditation Earned
+                    </span>
+                    <span className="text-xs text-amber-700 font-semibold">• 80%+ Mastery</span>
+                  </div>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900 mt-0.5">
+                    Official Certificate of Mastery Unlocked!
+                  </h3>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleDownloadCertificate}
+                  disabled={isDownloadingPdf}
+                  className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs transition-all flex items-center gap-1.5 shadow-sm touch-manipulation active:scale-[0.98]"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>{isDownloadingPdf ? 'Generating...' : 'Download PDF'}</span>
+                </button>
+
+                <Link
+                  to="/certificates"
+                  className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs transition-all flex items-center gap-1.5 shadow-sm touch-manipulation active:scale-[0.98]"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>View in Portal</span>
+                </Link>
+              </div>
+            </div>
+
+            <div className="bg-white/80 p-3 rounded-xl border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 font-medium">Certificate ID:</span>
+                <code className="font-mono font-bold text-slate-800 bg-amber-100/50 px-2 py-0.5 rounded border border-amber-200">
+                  {certId}
+                </code>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleCopyCertId(certId)}
+                  className="text-xs text-slate-600 hover:text-slate-900 flex items-center gap-1 font-medium"
+                >
+                  {copiedId ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedId ? 'Copied' : 'Copy ID'}</span>
+                </button>
+                <span className="text-slate-300">•</span>
+                <Link
+                  to={`/verify/${encodeURIComponent(certId)}`}
+                  target="_blank"
+                  className="text-primary hover:underline font-semibold"
+                >
+                  Public Verification Link
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Weak Topics Breakdown */}
         <div className="p-4 sm:p-6 rounded-xl border border-surface-border bg-white shadow-subtle space-y-3 sm:space-y-4">

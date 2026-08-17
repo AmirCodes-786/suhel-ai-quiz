@@ -16,7 +16,7 @@ const { scrapeUrlContent, extractYoutubeContent } = require('../services/webScra
 const { mockDB } = require('../models/store');
 const { v4: uuidv4 } = require('uuid');
 
-// 1. Generate Quiz from 7 Input Modalities with strict question count enforcement
+// 1. Generate Quiz from 7 Input Modalities with strict question count enforcement & Credential ID
 router.post('/quiz', upload.single('file'), authMiddleware, async (req, res, next) => {
   try {
     const {
@@ -90,9 +90,12 @@ router.post('/quiz', upload.single('file'), authMiddleware, async (req, res, nex
       : (req.user?.name || 'User');
 
     const newQuizId = `quiz_${uuidv4().slice(0, 8)}`;
+    const uniqueCredentialId = `QF-CR-${uuidv4().slice(0, 6).toUpperCase()}`;
+
     const savedQuiz = {
       _id: newQuizId,
       id: newQuizId,
+      credentialId: uniqueCredentialId,
       ...generatedQuiz,
       creator: userId,
       creatorName: userName,

@@ -40,7 +40,7 @@ function isAnswerCorrect(submitted, question) {
   return false;
 }
 
-// Get all quizzes (from MongoDB Atlas with fallback sync)
+// Get all quizzes (from MongoDB Atlas with fallback sync & credential ID guarantee)
 router.get('/', async (req, res) => {
   try {
     const { search, category, difficulty, isPublic, myQuizzes, userId } = req.query;
@@ -55,12 +55,17 @@ router.get('/', async (req, res) => {
         query.$or = [
           { title: { $regex: search, $options: 'i' } },
           { description: { $regex: search, $options: 'i' } },
-          { category: { $regex: search, $options: 'i' } }
+          { category: { $regex: search, $options: 'i' } },
+          { credentialId: { $regex: search, $options: 'i' } }
         ];
       }
 
-      const dbQuizzes = await Quiz.find(query).sort({ createdAt: -1 }).lean();
+      let dbQuizzes = await Quiz.find(query).sort({ createdAt: -1 }).lean();
       if (dbQuizzes && dbQuizzes.length > 0) {
+        dbQuizzes = dbQuizzes.map(q => ({
+          ...q,
+          credentialId: q.credentialId || `QF-CR-${String(q._id).replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase()}`
+        }));
         return res.json({ success: true, count: dbQuizzes.length, quizzes: dbQuizzes });
       }
     }
@@ -70,7 +75,10 @@ router.get('/', async (req, res) => {
 
   // Fallback to in-memory store
   const { search, category, difficulty, isPublic, myQuizzes, userId } = req.query;
-  let results = [...mockDB.quizzes];
+  let results = mockDB.quizzes.map(q => ({
+    ...q,
+    credentialId: q.credentialId || `QF-CR-${String(q._id || q.id).replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase()}`
+  }));
 
   if (myQuizzes === 'true' && userId) {
     results = results.filter(q => q.creator === userId);
@@ -83,6 +91,8 @@ router.get('/', async (req, res) => {
     results = results.filter(q => 
       q.title.toLowerCase().includes(s) || 
       q.description?.toLowerCase().includes(s) ||
+      q.category?.toLowerCase().includes(s) ||
+      q.credentialId?.toLowerCase().includes(s) ||
       q.tags?.some(t => t.toLowerCase().includes(s))
     );
   }
@@ -104,20 +114,32 @@ router.get('/:id', async (req, res) => {
 
   try {
     if (mongoose.connection.readyState === 1) {
-      const dbQuiz = await Quiz.findOne({ $or: [{ _id: targetId }, { id: targetId }] }).lean();
+      const dbQuiz = await Quiz.findOne({ 
+        $or: [{ _id: targetId }, { id: targetId }, { credentialId: targetId.toUpperCase() }] 
+      }).lean();
       if (dbQuiz) {
         await Quiz.updateOne({ _id: dbQuiz._id }, { $inc: { views: 1 } });
-        return res.json({ success: true, quiz: dbQuiz });
+        const withCred = {
+          ...dbQuiz,
+          credentialId: dbQuiz.credentialId || `QF-CR-${String(dbQuiz._id).replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase()}`
+        };
+        return res.json({ success: true, quiz: withCred });
       }
     }
   } catch (err) {}
 
-  const quiz = mockDB.quizzes.find(q => q._id === targetId || q.id === targetId);
+  const quiz = mockDB.quizzes.find(q => 
+    q._id === targetId || q.id === targetId || (q.credentialId && q.credentialId.toUpperCase() === targetId.toUpperCase())
+  );
   if (!quiz) {
     return res.status(404).json({ success: false, message: 'Quiz not found' });
   }
   quiz.views = (quiz.views || 0) + 1;
-  res.json({ success: true, quiz });
+  const withCred = {
+    ...quiz,
+    credentialId: quiz.credentialId || `QF-CR-${String(quiz._id || quiz.id).replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase()}`
+  };
+  res.json({ success: true, quiz: withCred });
 });
 
 // Create Quiz manually
@@ -128,9 +150,12 @@ router.post('/', authMiddleware, async (req, res) => {
     : (req.user?.name || 'User');
 
   const newQuizId = `quiz_${uuidv4().slice(0, 8)}`;
+  const uniqueCredentialId = `QF-CR-${uuidv4().slice(0, 6).toUpperCase()}`;
+
   const newQuiz = {
     _id: newQuizId,
     id: newQuizId,
+    credentialId: uniqueCredentialId,
     title: req.body.title || 'Untitled Assessment',
     description: req.body.description || '',
     category: req.body.category || 'General',
@@ -194,26 +219,31 @@ router.delete('/:id', authMiddleware, async (req, res) => {
   });
 });
 
-// Record Quiz Attempt with Authoritative Server-Side Evaluation & MongoDB persistence
+// Record Quiz Attempt with Authoritative Server-Side Evaluation & Automatic Certificate Issuance on Score >= 80%
 router.post('/:id/attempt', authMiddleware, async (req, res) => {
   const targetId = req.params.id;
   let quiz = null;
 
   try {
     if (mongoose.connection.readyState === 1) {
-      quiz = await Quiz.findOne({ $or: [{ _id: targetId }, { id: targetId }] }).lean();
+      quiz = await Quiz.findOne({ 
+        $or: [{ _id: targetId }, { id: targetId }, { credentialId: targetId.toUpperCase() }] 
+      }).lean();
     }
   } catch (e) {}
 
   if (!quiz) {
-    quiz = mockDB.quizzes.find(q => q._id === targetId || q.id === targetId);
+    quiz = mockDB.quizzes.find(q => 
+      q._id === targetId || q.id === targetId || (q.credentialId && q.credentialId.toUpperCase() === targetId.toUpperCase())
+    );
   }
 
   const { timeSpent, answers = [], weakTopics = [], quizTitle } = req.body;
   const rawUserName = req.headers['x-user-name'] ? decodeURIComponent(req.headers['x-user-name']) : (req.user?.name || 'Student');
-  const userId = req.user?._id || req.user?.id || req.headers['x-user-id'];
+  const userId = req.user?._id || req.user?.id || req.headers['x-user-id'] || 'guest_user';
   const userName = rawUserName || 'Student';
   const effectiveQuizTitle = quiz ? quiz.title : (quizTitle || 'Mastery Assessment');
+  const quizCredentialId = quiz ? (quiz.credentialId || `QF-CR-${String(quiz._id || targetId).slice(-6).toUpperCase()}`) : `QF-CR-${String(targetId).slice(-6).toUpperCase()}`;
 
   // Authoritative Server-Side Scoring
   let calculatedScore = 0;
@@ -271,7 +301,7 @@ router.post('/:id/attempt', authMiddleware, async (req, res) => {
     createdAt: new Date().toISOString()
   };
 
-  // Save to MongoDB Atlas
+  // Save Attempt to MongoDB Atlas
   try {
     if (mongoose.connection.readyState === 1) {
       await Attempt.create(newAttempt);
@@ -282,9 +312,73 @@ router.post('/:id/attempt', authMiddleware, async (req, res) => {
 
   mockDB.attempts.unshift(newAttempt);
 
+  // AUTOMATIC CERTIFICATE ISSUANCE on Score >= 80%
+  let certificateEarned = false;
+  let certificate = null;
+
+  if (finalPercentage >= 80) {
+    certificateEarned = true;
+    
+    // Check if certificate already exists for this user and quiz
+    let existingCert = null;
+    try {
+      if (mongoose.connection.readyState === 1) {
+        existingCert = await Certificate.findOne({
+          $or: [
+            { userId, quizId: targetId },
+            { userId, quizCredentialId },
+            { userId, quizTitle: effectiveQuizTitle }
+          ]
+        }).lean();
+      }
+    } catch (e) {}
+
+    if (!existingCert) {
+      existingCert = mockDB.certificates.find(c => 
+        (c.userId === userId) && (c.quizId === targetId || c.quizTitle === effectiveQuizTitle || c.quizCredentialId === quizCredentialId)
+      );
+    }
+
+    if (existingCert) {
+      certificate = existingCert;
+    } else {
+      const generatedCertId = `QF-AI-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
+      const certDocId = `cert_${uuidv4().slice(0, 8)}`;
+      
+      const newCert = {
+        _id: certDocId,
+        id: certDocId,
+        certificateId: generatedCertId,
+        recipientName: userName,
+        recipientEmail: req.user?.email || '',
+        userId: userId,
+        quizId: targetId,
+        quizCredentialId: quizCredentialId,
+        quizTitle: effectiveQuizTitle,
+        score: finalPercentage,
+        issueDate: new Date().toISOString().split('T')[0],
+        verificationUrl: `/verify/${generatedCertId}`,
+        skills: ['Cognitive Mastery', 'Bloom Level Evaluation', 'Critical Problem Solving', 'Active Recall Mastery']
+      };
+
+      try {
+        if (mongoose.connection.readyState === 1) {
+          await Certificate.create(newCert);
+        }
+      } catch (e) {
+        console.warn('MongoDB Certificate.create warning:', e.message);
+      }
+
+      mockDB.certificates.unshift(newCert);
+      certificate = newCert;
+    }
+  }
+
   res.status(201).json({ 
     success: true, 
-    attempt: newAttempt
+    attempt: newAttempt,
+    certificateEarned,
+    certificate
   });
 });
 

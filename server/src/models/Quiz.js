@@ -24,6 +24,7 @@ const QuestionSchema = new mongoose.Schema({
 const QuizSchema = new mongoose.Schema({
   _id: { type: String, required: true },
   id: { type: String },
+  credentialId: { type: String, index: true }, // Unique Accreditation / Credential ID for verification
   title: { type: String, required: true },
   description: { type: String, default: '' },
   category: { type: String, default: 'General' },
@@ -48,5 +49,6 @@ const QuizSchema = new mongoose.Schema({
 
 QuizSchema.index({ creator: 1, createdAt: -1 });
 QuizSchema.index({ category: 1 });
+QuizSchema.index({ credentialId: 1 });
 
 module.exports = mongoose.model('Quiz', QuizSchema);

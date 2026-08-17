@@ -7,7 +7,10 @@ import {
   Copy, 
   Trash2, 
   Clock, 
-  BookOpen
+  BookOpen,
+  Award,
+  ShieldCheck,
+  Check
 } from 'lucide-react';
 import api from '../../services/api';
 import { LibrarySkeleton } from '../common/SkeletonLoader';
@@ -22,6 +25,7 @@ export default function QuizLibraryView() {
   const [search, setSearch] = useState('');
   const [selectedDifficulty, setSelectedDifficulty] = useState('All');
   const [loading, setLoading] = useState(true);
+  const [copiedCredId, setCopiedCredId] = useState(null);
 
   // Delete modal state
   const [deleteTargetId, setDeleteTargetId] = useState(null);
@@ -72,35 +76,54 @@ export default function QuizLibraryView() {
     }
   };
 
+  const handleCopyCredential = (credId) => {
+    if (!credId) return;
+    navigator.clipboard.writeText(credId);
+    setCopiedCredId(credId);
+    toast.success(`Credential ID ${credId} copied!`);
+    setTimeout(() => setCopiedCredId(null), 2500);
+  };
+
   if (loading) {
     return <LibrarySkeleton />;
   }
 
   const filtered = quizzes.filter(q => {
     const matchesSearch = q.title.toLowerCase().includes(search.toLowerCase()) ||
-                          q.category?.toLowerCase().includes(search.toLowerCase());
+                          q.category?.toLowerCase().includes(search.toLowerCase()) ||
+                          (q.credentialId && q.credentialId.toLowerCase().includes(search.toLowerCase()));
     const matchesDiff = selectedDifficulty === 'All' || q.difficulty === selectedDifficulty;
     return matchesSearch && matchesDiff;
   });
 
   return (
-    <PageTransition className="max-w-5xl mx-auto space-y-6">
+    <PageTransition className="max-w-5xl mx-auto space-y-6 pb-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-surface-border pb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-surface-border pb-5">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Quiz Library</h1>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Quiz Library</h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Manage, duplicate, and practice your saved quizzes.
+            Manage, duplicate, and practice your saved quizzes with verified accreditation IDs.
           </p>
         </div>
 
-        <Link
-          to="/ai-studio"
-          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-white font-medium text-xs shadow-xs transition-all hover:scale-[1.01] active:scale-[0.98]"
-        >
-          <Plus className="w-4 h-4" />
-          Create Quiz
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/certificates"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium text-xs transition-colors"
+          >
+            <Award className="w-4 h-4 text-amber-500" />
+            <span>Certificates Portal</span>
+          </Link>
+
+          <Link
+            to="/ai-studio"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white font-medium text-xs shadow-xs transition-all hover:scale-[1.01] active:scale-[0.98]"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create Quiz</span>
+          </Link>
+        </div>
       </div>
 
       {/* Filter / Search Bar */}
@@ -111,12 +134,12 @@ export default function QuizLibraryView() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search quizzes..."
-            className="w-full pl-9 pr-3 py-2 rounded-lg border border-surface-border bg-white text-xs placeholder:text-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+            placeholder="Search by topic, title, or Credential ID..."
+            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-surface-border bg-white text-xs placeholder:text-slate-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
           />
         </div>
 
-        <div className="flex items-center gap-1.5 self-start sm:self-auto">
+        <div className="flex items-center gap-1.5 self-start sm:self-auto overflow-x-auto pb-1 max-w-full">
           {['All', 'Easy', 'Medium', 'Hard'].map((diff) => (
             <button
               key={diff}
@@ -158,67 +181,97 @@ export default function QuizLibraryView() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filtered.map((quiz) => (
-            <div
-              key={quiz._id || quiz.id}
-              className="p-5 rounded-xl border border-surface-border bg-white shadow-subtle flex flex-col justify-between space-y-4 hover:border-slate-300 transition-colors"
-            >
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-primary bg-primary-light px-2.5 py-0.5 rounded">
-                    {quiz.category || 'General'}
-                  </span>
-                  <span className="text-xs text-slate-500 font-medium">{quiz.difficulty || 'Medium'}</span>
+          {filtered.map((quiz) => {
+            const credId = quiz.credentialId || `QF-CR-${String(quiz._id || quiz.id).replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase()}`;
+
+            return (
+              <div
+                key={quiz._id || quiz.id}
+                className="p-5 rounded-2xl border border-surface-border bg-white shadow-subtle flex flex-col justify-between space-y-4 hover:border-slate-300 transition-colors"
+              >
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold text-primary bg-primary-light px-2.5 py-0.5 rounded">
+                      {quiz.category || 'General'}
+                    </span>
+                    <span className="text-xs text-slate-500 font-medium">{quiz.difficulty || 'Medium'}</span>
+                  </div>
+
+                  <h3 className="text-sm font-bold text-slate-900 leading-snug">
+                    {quiz.title}
+                  </h3>
+
+                  <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                    {quiz.description || 'Comprehensive evaluation synthesized by QuizForge AI.'}
+                  </p>
+
+                  {/* Unique Credential / Accreditation ID Badge */}
+                  <div className="pt-2 flex items-center justify-between bg-slate-50 p-2 rounded-xl border border-slate-100 text-xs">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <ShieldCheck className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      <span className="text-[11px] text-slate-500 font-medium shrink-0">Credential ID:</span>
+                      <code className="font-mono text-[11px] font-bold text-slate-800 truncate">{credId}</code>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => handleCopyCredential(credId)}
+                        className="p-1 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-200 transition-colors"
+                        title="Copy Credential ID"
+                      >
+                        {copiedCredId === credId ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                      <Link
+                        to={`/certificates?verify=${encodeURIComponent(credId)}`}
+                        className="text-[10px] text-primary hover:underline font-semibold pl-1"
+                        title="Verify if Certificate is available for this quiz"
+                      >
+                        Check Status
+                      </Link>
+                    </div>
+                  </div>
                 </div>
 
-                <h3 className="text-sm font-bold text-slate-900 leading-snug">
-                  {quiz.title}
-                </h3>
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-3 text-xs text-slate-400">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" />
+                      {quiz.timeLimit || 10}m
+                    </span>
+                    <span>{quiz.questions?.length || 5} Questions</span>
+                  </div>
 
-                <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
-                  {quiz.description || 'Comprehensive evaluation synthesized by QuizForge AI.'}
-                </p>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleDuplicate(quiz._id || quiz.id)}
+                      className="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                      title="Duplicate Quiz"
+                      aria-label="Duplicate Quiz"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      onClick={() => setDeleteTargetId(quiz._id || quiz.id)}
+                      className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      title="Delete Quiz"
+                      aria-label="Delete Quiz"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+
+                    <Link
+                      to={`/quiz/${quiz._id || quiz.id}`}
+                      className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition-all hover:scale-[1.01] active:scale-[0.98] shadow-xs"
+                    >
+                      <Play className="w-3 h-3 fill-white" />
+                      <span>Practice</span>
+                    </Link>
+                  </div>
+                </div>
               </div>
-
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-3 text-xs text-slate-400">
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5" />
-                    {quiz.timeLimit || 10}m
-                  </span>
-                  <span>{quiz.questions?.length || 5} Questions</span>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => handleDuplicate(quiz._id || quiz.id)}
-                    className="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-                    title="Duplicate Quiz"
-                    aria-label="Duplicate Quiz"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                  </button>
-
-                  <button
-                    onClick={() => setDeleteTargetId(quiz._id || quiz.id)}
-                    className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                    title="Delete Quiz"
-                    aria-label="Delete Quiz"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-
-                  <Link
-                    to={`/quiz/${quiz._id || quiz.id}`}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium transition-all hover:scale-[1.01] active:scale-[0.98]"
-                  >
-                    <Play className="w-3 h-3 fill-white" />
-                    <span>Practice</span>
-                  </Link>
-                </div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
