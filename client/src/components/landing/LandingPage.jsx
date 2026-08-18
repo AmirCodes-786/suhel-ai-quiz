@@ -129,7 +129,7 @@ export default function LandingPage() {
   };
 
   return (
-    <PageTransition className="min-h-screen bg-[#FDFDFC] text-slate-900 overflow-x-hidden selection:bg-primary-light selection:text-primary">
+    <PageTransition className="min-h-screen bg-[#FDFDFC] text-slate-900 selection:bg-primary-light selection:text-primary">
       {/* Dynamic Ambient Background Glows */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[750px] h-[450px] bg-gradient-to-tr from-primary/15 via-indigo-500/10 to-amber-400/10 blur-[130px] rounded-full" />
@@ -137,8 +137,8 @@ export default function LandingPage() {
         <div className="absolute top-[70%] -left-40 w-[450px] h-[450px] bg-primary/10 blur-[140px] rounded-full" />
       </div>
 
-      {/* 1. STICKY NAVBAR */}
-      <header className="sticky top-0 z-40 w-full border-b border-slate-200/80 bg-white/85 backdrop-blur-md transition-all">
+      {/* 1. FIXED NAVBAR (Always visible when scrolling) */}
+      <header className="fixed top-0 left-0 right-0 z-50 w-full border-b border-slate-200/80 bg-white/95 backdrop-blur-md shadow-xs transition-all">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5 font-bold text-lg text-slate-900 hover:opacity-90 transition-opacity">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-primary to-indigo-600 flex items-center justify-center text-white shadow-sm shadow-primary/20">
@@ -175,8 +175,8 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* 2. HERO SECTION (Mobile-First Polish) */}
-      <section className="relative z-10 pt-10 sm:pt-20 pb-12 sm:pb-20 px-4 max-w-5xl mx-auto text-center">
+      {/* 2. HERO SECTION (With pt-20 for fixed header clearance) */}
+      <section className="relative z-10 pt-20 sm:pt-28 pb-12 sm:pb-20 px-4 max-w-5xl mx-auto text-center">
         {/* Animated Eyebrow Pill */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}

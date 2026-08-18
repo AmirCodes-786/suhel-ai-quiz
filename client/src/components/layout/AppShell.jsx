@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { useLocation, useOutlet } from 'react-router-dom';
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
 import Footer from './Footer';
@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AppShell() {
   const location = useLocation();
+  const outlet = useOutlet();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
 
@@ -25,7 +26,7 @@ export default function AppShell() {
 
     const timer = setTimeout(() => {
       setIsNavigating(false);
-    }, 280);
+    }, 300);
 
     return () => clearTimeout(timer);
   }, [location.pathname]);
@@ -35,7 +36,9 @@ export default function AppShell() {
     return (
       <div className="min-h-screen bg-background text-foreground flex flex-col selection:bg-primary-light selection:text-primary">
         <main className="flex-1 w-full">
-          <Outlet />
+          <AnimatePresence mode="wait" initial={false}>
+            {outlet && React.cloneElement(outlet, { key: location.pathname })}
+          </AnimatePresence>
         </main>
       </div>
     );
@@ -50,8 +53,8 @@ export default function AppShell() {
             initial={{ scaleX: 0, transformOrigin: '0% 50%' }}
             animate={{ scaleX: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
-            className="fixed top-0 left-0 right-0 h-[2.5px] bg-gradient-to-r from-primary via-indigo-500 to-amber-400 z-50 shadow-xs"
+            transition={{ duration: 0.28, ease: 'easeOut' }}
+            className="fixed top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-primary via-indigo-500 to-amber-400 z-50 shadow-sm"
           />
         )}
       </AnimatePresence>
@@ -102,10 +105,8 @@ export default function AppShell() {
           className="flex-1 h-full overflow-y-auto overflow-x-hidden flex flex-col justify-between"
         >
           <main className={isQuizPlayer ? 'w-full flex-1' : 'p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full flex-1'}>
-            <AnimatePresence mode="wait">
-              <div key={location.pathname} className="w-full">
-                <Outlet />
-              </div>
+            <AnimatePresence mode="wait" initial={false}>
+              {outlet && React.cloneElement(outlet, { key: location.pathname })}
             </AnimatePresence>
           </main>
           {!isQuizPlayer && <Footer />}
