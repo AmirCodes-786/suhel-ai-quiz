@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 // Admin emails - unrestricted unlimited generation
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'sohelmessi786@gmail.com,amirsohel@gmail.com,amirsohel.dev@gmail.com,admin@quizforge.ai,alex@quizforge.ai,sohel@quizforge.ai')
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'justforfun09786@gmail.com')
   .toLowerCase()
   .split(',')
   .map(e => e.trim());
