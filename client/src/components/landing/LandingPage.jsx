@@ -25,7 +25,9 @@ import {
   Flame,
   CheckCircle2,
   TrendingUp,
-  Play
+  Play,
+  Menu,
+  X
 } from 'lucide-react';
 import PageTransition from '../common/PageTransition';
 
@@ -104,6 +106,8 @@ export default function LandingPage() {
   const [selectedOption, setSelectedOption] = useState(null);
   const [showExplanation, setShowExplanation] = useState(false);
   const [openFaq, setOpenFaq] = useState(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
 
   // Interactive 3D Flip Card state on landing page
   const [isDemoFlipped, setIsDemoFlipped] = useState(false);
@@ -114,6 +118,15 @@ export default function LandingPage() {
     { name: 'Sophia', score: 340, streak: 2, isYou: false },
     { name: 'Marcus', score: 290, streak: 1, isYou: false }
   ]);
+
+  // Track window scroll for responsive glass navbar elevation
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const currentQ = DEMO_QUESTIONS[activeDemoIdx];
 
@@ -128,8 +141,23 @@ export default function LandingPage() {
     setActiveDemoIdx((prev) => (prev + 1) % DEMO_QUESTIONS.length);
   };
 
+  const scrollToSection = (e, sectionId) => {
+    e.preventDefault();
+    setIsMobileMenuOpen(false);
+    const target = document.getElementById(sectionId);
+    if (target) {
+      const topOffset = 80;
+      const elementPosition = target.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + window.pageYOffset - topOffset;
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: 'smooth'
+      });
+    }
+  };
+
   return (
-    <PageTransition className="min-h-screen bg-[#FDFDFC] text-slate-900 selection:bg-primary-light selection:text-primary">
+    <PageTransition className="min-h-screen bg-[#FDFDFC] text-slate-900 selection:bg-primary-light selection:text-primary relative">
       {/* Dynamic Ambient Background Glows */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[750px] h-[450px] bg-gradient-to-tr from-primary/15 via-indigo-500/10 to-amber-400/10 blur-[130px] rounded-full" />
@@ -137,10 +165,25 @@ export default function LandingPage() {
         <div className="absolute top-[70%] -left-40 w-[450px] h-[450px] bg-primary/10 blur-[140px] rounded-full" />
       </div>
 
-      {/* 1. FIXED NAVBAR (Always visible when scrolling) */}
-      <header className="fixed top-0 left-0 right-0 z-50 w-full border-b border-slate-200/80 bg-white/95 backdrop-blur-md shadow-xs transition-all">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2.5 font-bold text-lg text-slate-900 hover:opacity-90 transition-opacity">
+      {/* 1. FIXED FLOATING NAVBAR (Always visible and elevated on scroll) */}
+      <header 
+        className={`fixed top-0 left-0 right-0 z-50 w-full transition-all duration-200 ${
+          isScrolled 
+            ? 'bg-white/95 backdrop-blur-xl border-b border-slate-200/90 shadow-md shadow-slate-900/5 py-2.5 sm:py-3' 
+            : 'bg-white/80 backdrop-blur-md border-b border-slate-200/60 py-3.5 sm:py-4'
+        }`}
+      >
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between">
+          <Link 
+            to="/" 
+            className="flex items-center gap-2.5 font-bold text-lg text-slate-900 hover:opacity-90 transition-opacity"
+            onClick={(e) => {
+              if (window.location.pathname === '/') {
+                e.preventDefault();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }
+            }}
+          >
             <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-primary to-indigo-600 flex items-center justify-center text-white shadow-sm shadow-primary/20">
               <Zap className="w-4 h-4 fill-white" />
             </div>
@@ -149,18 +192,19 @@ export default function LandingPage() {
             </span>
           </Link>
 
+          {/* Desktop Navigation Links */}
           <nav className="hidden md:flex items-center gap-7 text-xs font-semibold text-slate-600 uppercase tracking-wider">
-            <a href="#demo" className="hover:text-primary transition-colors">Live Demo</a>
-            <a href="#features" className="hover:text-primary transition-colors">Features</a>
-            <a href="#modes" className="hover:text-primary transition-colors">Modes</a>
-            <a href="#pricing" className="hover:text-primary transition-colors">Pricing</a>
-            <a href="#faq" className="hover:text-primary transition-colors">FAQ</a>
+            <a href="#demo" onClick={(e) => scrollToSection(e, 'demo')} className="hover:text-primary transition-colors">Live Demo</a>
+            <a href="#features" onClick={(e) => scrollToSection(e, 'features')} className="hover:text-primary transition-colors">Features</a>
+            <a href="#modes" onClick={(e) => scrollToSection(e, 'modes')} className="hover:text-primary transition-colors">Modes</a>
+            <a href="#pricing" onClick={(e) => scrollToSection(e, 'pricing')} className="hover:text-primary transition-colors">Pricing</a>
+            <a href="#faq" onClick={(e) => scrollToSection(e, 'faq')} className="hover:text-primary transition-colors">FAQ</a>
           </nav>
 
           <div className="flex items-center gap-2 sm:gap-3">
             <Link
               to="/sign-in"
-              className="text-xs sm:text-sm font-semibold text-slate-700 hover:text-slate-900 px-3 py-1.5 rounded-lg hover:bg-slate-100/70 transition-colors"
+              className="hidden xs:inline-block text-xs sm:text-sm font-semibold text-slate-700 hover:text-slate-900 px-3 py-1.5 rounded-lg hover:bg-slate-100/70 transition-colors"
             >
               Sign In
             </Link>
@@ -171,12 +215,94 @@ export default function LandingPage() {
               <span>Get Started Free</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
+
+            {/* Mobile Hamburger Toggle */}
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="md:hidden p-2 rounded-xl text-slate-700 hover:bg-slate-100/80 active:bg-slate-200 transition-colors"
+              aria-label="Toggle Navigation Menu"
+            >
+              {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
           </div>
         </div>
+
+        {/* Mobile Dropdown Navigation Menu */}
+        <AnimatePresence>
+          {isMobileMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className="md:hidden border-t border-slate-200/80 bg-white/95 backdrop-blur-xl px-4 py-4 shadow-xl space-y-3"
+            >
+              <nav className="flex flex-col space-y-2 text-sm font-semibold text-slate-700">
+                <a 
+                  href="#demo" 
+                  onClick={(e) => scrollToSection(e, 'demo')}
+                  className="px-3 py-2 rounded-lg hover:bg-slate-100 flex items-center justify-between"
+                >
+                  <span>Live Interactive Demo</span>
+                  <ArrowRight className="w-4 h-4 text-slate-400" />
+                </a>
+                <a 
+                  href="#features" 
+                  onClick={(e) => scrollToSection(e, 'features')}
+                  className="px-3 py-2 rounded-lg hover:bg-slate-100 flex items-center justify-between"
+                >
+                  <span>Features & Capabilities</span>
+                  <ArrowRight className="w-4 h-4 text-slate-400" />
+                </a>
+                <a 
+                  href="#modes" 
+                  onClick={(e) => scrollToSection(e, 'modes')}
+                  className="px-3 py-2 rounded-lg hover:bg-slate-100 flex items-center justify-between"
+                >
+                  <span>Learning Modes (Battles, Flashcards)</span>
+                  <ArrowRight className="w-4 h-4 text-slate-400" />
+                </a>
+                <a 
+                  href="#pricing" 
+                  onClick={(e) => scrollToSection(e, 'pricing')}
+                  className="px-3 py-2 rounded-lg hover:bg-slate-100 flex items-center justify-between"
+                >
+                  <span>Pricing Plans</span>
+                  <ArrowRight className="w-4 h-4 text-slate-400" />
+                </a>
+                <a 
+                  href="#faq" 
+                  onClick={(e) => scrollToSection(e, 'faq')}
+                  className="px-3 py-2 rounded-lg hover:bg-slate-100 flex items-center justify-between"
+                >
+                  <span>Frequently Asked Questions</span>
+                  <ArrowRight className="w-4 h-4 text-slate-400" />
+                </a>
+              </nav>
+
+              <div className="pt-2 border-t border-slate-100 flex flex-col gap-2">
+                <Link
+                  to="/sign-in"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="w-full py-2.5 text-center rounded-xl border border-slate-200 text-slate-800 font-semibold text-xs hover:bg-slate-50"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  to="/sign-up"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="w-full py-2.5 text-center rounded-xl bg-primary text-white font-bold text-xs shadow-sm shadow-primary/20"
+                >
+                  Get Started Free
+                </Link>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </header>
 
-      {/* 2. HERO SECTION (With pt-20 for fixed header clearance) */}
-      <section className="relative z-10 pt-20 sm:pt-28 pb-12 sm:pb-20 px-4 max-w-5xl mx-auto text-center">
+      {/* 2. HERO SECTION (Mobile-First Polish with Fixed Header Clearance) */}
+      <section className="relative z-10 pt-24 sm:pt-32 pb-12 sm:pb-20 px-4 max-w-5xl mx-auto text-center">
         {/* Animated Eyebrow Pill */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -235,6 +361,7 @@ export default function LandingPage() {
           </Link>
           <a
             href="#demo"
+            onClick={(e) => scrollToSection(e, 'demo')}
             className="w-full xs:w-auto min-h-[48px] px-6 py-3 rounded-xl bg-white hover:bg-slate-50 active:scale-95 border border-slate-300 text-slate-800 font-bold text-sm shadow-2xs flex items-center justify-center gap-2 transition-all"
           >
             <Play className="w-3.5 h-3.5 fill-slate-700 text-slate-700" />
@@ -255,8 +382,8 @@ export default function LandingPage() {
         </motion.div>
       </section>
 
-      {/* 3. INTERACTIVE LIVE DEMO PLAYGROUND (WOW Factor) */}
-      <section id="demo" className="relative z-10 px-4 pb-16 sm:pb-24 max-w-4xl mx-auto">
+      {/* 3. INTERACTIVE LIVE DEMO PLAYGROUND */}
+      <section id="demo" className="relative z-10 px-4 pb-16 sm:pb-24 max-w-4xl mx-auto scroll-mt-24">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -390,11 +517,68 @@ export default function LandingPage() {
         </motion.div>
       </section>
 
-      {/* 4. FOUR LEARNING MODALITIES (Interactive 3D Cards) */}
-      <section id="modes" className="relative z-10 py-16 sm:py-24 px-4 max-w-5xl mx-auto border-t border-slate-200/80">
+      {/* 4. CORE FEATURES SECTION */}
+      <section id="features" className="relative z-10 py-16 sm:py-24 px-4 max-w-5xl mx-auto border-t border-slate-200/80 scroll-mt-24">
         <div className="text-center max-w-xl mx-auto mb-12 sm:mb-16">
           <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full uppercase tracking-wider border border-primary/20">
-            Omnichannel Learning
+            Intelligent Engine
+          </span>
+          <h2 className="text-2xl sm:text-4xl font-extrabold text-slate-900 mt-3 mb-3">
+            Engineered for Deep Learning
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-600">
+            Everything you need to turn raw study content into verified long-term mastery.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6">
+          <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-subtle space-y-3 hover:border-slate-300 transition-colors">
+            <div className="w-10 h-10 rounded-xl bg-primary-light text-primary flex items-center justify-center">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <h3 className="text-base sm:text-lg font-bold text-slate-900">AI Question Generation</h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Transform lectures, PDFs, and articles into multi-choice, true/false, or fill-in questions grounded in source facts.
+            </p>
+          </div>
+
+          <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-subtle space-y-3 hover:border-slate-300 transition-colors">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <Target className="w-5 h-5" />
+            </div>
+            <h3 className="text-base sm:text-lg font-bold text-slate-900">Bloom's Cognitive Taxonomy</h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Target foundational Recall, conceptual Understanding, or high-tier Application and Analysis tiers.
+            </p>
+          </div>
+
+          <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-subtle space-y-3 hover:border-slate-300 transition-colors">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <h3 className="text-base sm:text-lg font-bold text-slate-900">Balanced A/B/C/D Distribution</h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Deterministic backend answer balancer eliminates predictable answer slots and streaks while preserving factual truth.
+            </p>
+          </div>
+
+          <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-subtle space-y-3 hover:border-slate-300 transition-colors">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <TrendingUp className="w-5 h-5" />
+            </div>
+            <h3 className="text-base sm:text-lg font-bold text-slate-900">Weak-Topic Adaptive Practice</h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Pinpoints exact missed concepts from each assessment and synthesizes 1-click targeted remediation quizzes.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* 5. FOUR LEARNING MODES */}
+      <section id="modes" className="relative z-10 py-16 sm:py-24 px-4 max-w-5xl mx-auto border-t border-slate-200/80 scroll-mt-24">
+        <div className="text-center max-w-xl mx-auto mb-12 sm:mb-16">
+          <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full uppercase tracking-wider border border-primary/20">
+            Omnichannel Modes
           </span>
           <h2 className="text-2xl sm:text-4xl font-extrabold text-slate-900 mt-3 mb-3">
             Every Way You Study, Supercharged.
@@ -425,7 +609,7 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Card 2: Active Recall Flashcards (Interactive Flip Preview) */}
+          {/* Card 2: Active Recall Flashcards */}
           <div 
             onClick={() => setIsDemoFlipped(!isDemoFlipped)}
             className="p-6 rounded-2xl border border-slate-200/90 bg-white shadow-subtle hover:border-slate-300 cursor-pointer transition-all flex flex-col justify-between space-y-4 group"
@@ -497,8 +681,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 5. PRICING SECTION */}
-      <section id="pricing" className="relative z-10 py-16 sm:py-24 px-4 max-w-4xl mx-auto border-t border-slate-200/80">
+      {/* 6. PRICING SECTION */}
+      <section id="pricing" className="relative z-10 py-16 sm:py-24 px-4 max-w-4xl mx-auto border-t border-slate-200/80 scroll-mt-24">
         <div className="text-center max-w-xl mx-auto mb-12">
           <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full uppercase tracking-wider border border-primary/20">
             Simple Pricing
@@ -565,8 +749,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 6. FAQ ACCORDION */}
-      <section id="faq" className="relative z-10 py-16 sm:py-24 px-4 max-w-3xl mx-auto border-t border-slate-200/80">
+      {/* 7. FAQ ACCORDION */}
+      <section id="faq" className="relative z-10 py-16 sm:py-24 px-4 max-w-3xl mx-auto border-t border-slate-200/80 scroll-mt-24">
         <div className="text-center mb-10">
           <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900">Frequently Asked Questions</h2>
         </div>
@@ -601,7 +785,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 7. FINAL CALL TO ACTION BANNER */}
+      {/* 8. FINAL CALL TO ACTION BANNER */}
       <section className="relative z-10 py-16 sm:py-20 px-4 max-w-4xl mx-auto text-center">
         <div className="p-8 sm:p-12 rounded-3xl bg-gradient-to-tr from-slate-950 via-indigo-950 to-slate-900 text-white shadow-2xl space-y-6">
           <span className="text-xs font-bold text-amber-400 bg-amber-400/10 px-3 py-1 rounded-full border border-amber-400/20 uppercase tracking-wider">
