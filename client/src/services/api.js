@@ -21,6 +21,9 @@ api.interceptors.request.use((config) => {
       if (user?._id || user?.id) {
         config.headers['x-user-id'] = user._id || user.id;
       }
+      if (user?.email) {
+        config.headers['x-user-email'] = user.email.toLowerCase().trim();
+      }
       if (user?.name) {
         config.headers['x-user-name'] = encodeURIComponent(user.name);
       }

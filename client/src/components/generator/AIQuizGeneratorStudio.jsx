@@ -185,7 +185,8 @@ export default function AIQuizGeneratorStudio() {
     }
   };
 
-  const isUnlimited = quota.isAdmin;
+  const isAdminEmail = user?.email?.toLowerCase().trim() === 'justforfun09786@gmail.com';
+  const isUnlimited = quota.isAdmin || user?.isAdmin || user?.role === 'admin' || isAdminEmail;
   const leftCount = typeof quota.generationsLeft === 'number' ? quota.generationsLeft : 10;
   const progressPercent = isUnlimited ? 100 : Math.min(100, Math.max(0, (leftCount / quota.dailyLimit) * 100));
 
