@@ -141,18 +141,11 @@ export default function LandingPage() {
     setActiveDemoIdx((prev) => (prev + 1) % DEMO_QUESTIONS.length);
   };
 
-  const scrollToSection = (e, sectionId) => {
-    e.preventDefault();
+  const handleNavClick = (sectionId) => {
     setIsMobileMenuOpen(false);
     const target = document.getElementById(sectionId);
     if (target) {
-      const topOffset = 80;
-      const elementPosition = target.getBoundingClientRect().top;
-      const offsetPosition = elementPosition + window.pageYOffset - topOffset;
-      window.scrollTo({
-        top: offsetPosition,
-        behavior: 'smooth'
-      });
+      target.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
@@ -194,11 +187,11 @@ export default function LandingPage() {
 
           {/* Desktop Navigation Links */}
           <nav className="hidden md:flex items-center gap-7 text-xs font-semibold text-slate-600 uppercase tracking-wider">
-            <a href="#demo" onClick={(e) => scrollToSection(e, 'demo')} className="hover:text-primary transition-colors">Live Demo</a>
-            <a href="#features" onClick={(e) => scrollToSection(e, 'features')} className="hover:text-primary transition-colors">Features</a>
-            <a href="#modes" onClick={(e) => scrollToSection(e, 'modes')} className="hover:text-primary transition-colors">Modes</a>
-            <a href="#pricing" onClick={(e) => scrollToSection(e, 'pricing')} className="hover:text-primary transition-colors">Pricing</a>
-            <a href="#faq" onClick={(e) => scrollToSection(e, 'faq')} className="hover:text-primary transition-colors">FAQ</a>
+            <button type="button" onClick={() => handleNavClick('demo')} className="hover:text-primary transition-colors cursor-pointer font-semibold uppercase">Live Demo</button>
+            <button type="button" onClick={() => handleNavClick('features')} className="hover:text-primary transition-colors cursor-pointer font-semibold uppercase">Features</button>
+            <button type="button" onClick={() => handleNavClick('modes')} className="hover:text-primary transition-colors cursor-pointer font-semibold uppercase">Modes</button>
+            <button type="button" onClick={() => handleNavClick('pricing')} className="hover:text-primary transition-colors cursor-pointer font-semibold uppercase">Pricing</button>
+            <button type="button" onClick={() => handleNavClick('faq')} className="hover:text-primary transition-colors cursor-pointer font-semibold uppercase">FAQ</button>
           </nav>
 
           <div className="flex items-center gap-1.5 sm:gap-3">
@@ -218,8 +211,9 @@ export default function LandingPage() {
 
             {/* Mobile Hamburger Toggle */}
             <button
+              type="button"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden p-2 rounded-xl text-slate-700 hover:bg-slate-100/80 active:bg-slate-200 transition-colors shrink-0"
+              className="md:hidden p-2 rounded-xl text-slate-700 hover:bg-slate-100/80 active:bg-slate-200 transition-colors shrink-0 z-50 cursor-pointer"
               aria-label="Toggle Navigation Menu"
             >
               {isMobileMenuOpen ? <X className="w-5 h-5 text-slate-900" /> : <Menu className="w-5 h-5 text-slate-900" />}
@@ -235,49 +229,49 @@ export default function LandingPage() {
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className="md:hidden border-t border-slate-200/80 bg-white/98 backdrop-blur-2xl px-4 py-4 shadow-xl space-y-3"
+              className="md:hidden border-t border-slate-200/80 bg-white/98 backdrop-blur-2xl px-4 py-4 shadow-2xl space-y-3 relative z-50"
             >
               <nav className="flex flex-col space-y-1 text-sm font-semibold text-slate-700">
-                <a 
-                  href="#demo" 
-                  onClick={(e) => scrollToSection(e, 'demo')}
-                  className="px-3 py-2.5 rounded-xl hover:bg-slate-100 active:bg-slate-200 flex items-center justify-between transition-colors"
+                <button 
+                  type="button"
+                  onClick={() => handleNavClick('demo')}
+                  className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-slate-100 active:bg-slate-200 flex items-center justify-between transition-colors cursor-pointer"
                 >
                   <span>Live Interactive Demo</span>
                   <ArrowRight className="w-4 h-4 text-slate-400" />
-                </a>
-                <a 
-                  href="#features" 
-                  onClick={(e) => scrollToSection(e, 'features')}
-                  className="px-3 py-2.5 rounded-xl hover:bg-slate-100 active:bg-slate-200 flex items-center justify-between transition-colors"
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => handleNavClick('features')}
+                  className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-slate-100 active:bg-slate-200 flex items-center justify-between transition-colors cursor-pointer"
                 >
                   <span>Features & Capabilities</span>
                   <ArrowRight className="w-4 h-4 text-slate-400" />
-                </a>
-                <a 
-                  href="#modes" 
-                  onClick={(e) => scrollToSection(e, 'modes')}
-                  className="px-3 py-2.5 rounded-xl hover:bg-slate-100 active:bg-slate-200 flex items-center justify-between transition-colors"
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => handleNavClick('modes')}
+                  className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-slate-100 active:bg-slate-200 flex items-center justify-between transition-colors cursor-pointer"
                 >
                   <span>Learning Modes (Battles, Flashcards)</span>
                   <ArrowRight className="w-4 h-4 text-slate-400" />
-                </a>
-                <a 
-                  href="#pricing" 
-                  onClick={(e) => scrollToSection(e, 'pricing')}
-                  className="px-3 py-2.5 rounded-xl hover:bg-slate-100 active:bg-slate-200 flex items-center justify-between transition-colors"
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => handleNavClick('pricing')}
+                  className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-slate-100 active:bg-slate-200 flex items-center justify-between transition-colors cursor-pointer"
                 >
                   <span>Pricing Plans</span>
                   <ArrowRight className="w-4 h-4 text-slate-400" />
-                </a>
-                <a 
-                  href="#faq" 
-                  onClick={(e) => scrollToSection(e, 'faq')}
-                  className="px-3 py-2.5 rounded-xl hover:bg-slate-100 active:bg-slate-200 flex items-center justify-between transition-colors"
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => handleNavClick('faq')}
+                  className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-slate-100 active:bg-slate-200 flex items-center justify-between transition-colors cursor-pointer"
                 >
                   <span>Frequently Asked Questions</span>
                   <ArrowRight className="w-4 h-4 text-slate-400" />
-                </a>
+                </button>
               </nav>
 
               <div className="pt-2 border-t border-slate-100 grid grid-cols-2 gap-2">
