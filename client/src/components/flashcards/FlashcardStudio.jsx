@@ -5,13 +5,10 @@ import {
   ChevronLeft, 
   ChevronRight, 
   Plus, 
-  Check, 
   Sparkles,
   Bookmark,
   Shuffle,
   Trash2,
-  Brain,
-  Award,
   RefreshCw,
   X
 } from 'lucide-react';
@@ -84,35 +81,22 @@ export default function FlashcardStudio() {
     try {
       setLoading(true);
       const res = await api.get('/flashcards');
-      if (res.data?.success && res.data.sets && res.data.sets.length > 0) {
+      if (res.data?.success && Array.isArray(res.data.sets)) {
         setSets(res.data.sets);
       } else {
-        // Default initialized deck
-        setSets([
-          {
-            _id: 'fc_ai_core',
-            id: 'fc_ai_core',
-            title: 'Neural Networks & Deep Learning Core',
-            topic: 'Artificial Intelligence',
-            cards: [
-              { id: 'c1', front: 'What is Backpropagation?', back: 'An algorithm used to calculate the gradient of the loss function with respect to each weight via the chain rule, adjusting parameters to minimize error.', mastery: 'good', bookmarked: false },
-              { id: 'c2', front: 'What is the role of the Softmax function?', back: 'Normalizes a K-dimensional vector of real numbers (logits) into a probability distribution summing to 1.0.', mastery: 'easy', bookmarked: true },
-              { id: 'c3', front: 'Why is Dropout applied during neural network training?', back: 'Randomly zeros neuron activations with probability p during forward passes, preventing co-adaptation and reducing overfitting.', mastery: 'unseen', bookmarked: false },
-              { id: 'c4', front: 'What causes the Vanishing Gradient problem?', back: 'Repeated multiplication of gradients < 1.0 in deep networks with saturating activations (like Sigmoid/Tanh), shrinking backpropagated updates near input layers.', mastery: 'hard', bookmarked: true }
-            ]
-          }
-        ]);
+        setSets([]);
       }
     } catch (e) {
-      console.warn('Flashcards fallback:', e.message);
+      console.warn('Flashcards fetch fallback:', e.message);
+      setSets([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const currentSet = sets[activeSetIdx] || sets[0] || { title: 'Flashcards', cards: [] };
-  const cards = currentSet.cards || [];
-  const currentCard = cards[currentCardIdx] || cards[0];
+  const currentSet = sets[activeSetIdx] || null;
+  const cards = currentSet?.cards || [];
+  const currentCard = cards[currentCardIdx] || null;
 
   // Calculate deck mastery metrics
   const masteredCount = cards.filter(c => c.mastery === 'easy').length;
@@ -214,7 +198,7 @@ export default function FlashcardStudio() {
   };
 
   const handleGenerateDeck = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!newTopic.trim()) return;
     try {
       setIsGenerating(true);
@@ -270,249 +254,260 @@ export default function FlashcardStudio() {
         </button>
       </div>
 
-      {/* Deck Selector Tabs & Actions */}
-      {sets.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar flex-1">
-              {sets.map((s, idx) => (
-                <button
-                  key={s._id || s.id || idx}
-                  onClick={() => {
-                    setActiveSetIdx(idx);
-                    setCurrentCardIdx(0);
-                    setIsFlipped(false);
-                  }}
-                  className={`
-                    px-3.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all
-                    ${activeSetIdx === idx 
-                      ? 'bg-slate-900 text-white shadow-sm' 
-                      : 'bg-white border border-surface-border text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                    }
-                  `}
-                >
-                  {s.title || s.topic}
-                </button>
-              ))}
-            </div>
-
-            {sets.length > 0 && currentSet && (
-              <button
-                onClick={() => handleDeleteDeck(currentSet._id || currentSet.id)}
-                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                title="Delete this deck"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )}
+      {/* Main Flashcard Content */}
+      {sets.length === 0 ? (
+        <div className="p-12 text-center rounded-2xl border border-dashed border-slate-300 bg-white shadow-subtle space-y-4 max-w-lg mx-auto my-6">
+          <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center mx-auto">
+            <Layers className="w-6 h-6" />
           </div>
-
-          {/* Deck Mastery Progress Bar */}
-          <div className="p-3 bg-white border border-surface-border rounded-xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-xs">
-                {masteryPercentage}%
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-800">Retention Mastery</p>
-                <p className="text-[11px] text-slate-500">
-                  {masteredCount} Mastered • {goodCount} Good • {hardCount} Review Needed • {cards.length - masteredCount - goodCount - hardCount} Unseen
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleShuffle}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-surface-border bg-slate-50 hover:bg-slate-100 text-[11px] font-medium text-slate-700 transition-colors"
-                title="Shuffle card order"
-              >
-                <Shuffle className="w-3 h-3 text-slate-500" />
-                Shuffle
-              </button>
-              <button
-                onClick={handleRestart}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-surface-border bg-slate-50 hover:bg-slate-100 text-[11px] font-medium text-slate-700 transition-colors"
-                title="Restart review from first card"
-              >
-                <RefreshCw className="w-3 h-3 text-slate-500" />
-                Restart
-              </button>
-            </div>
+          <div className="space-y-1">
+            <h3 className="text-base font-bold text-slate-900">No Flashcard Decks Yet</h3>
+            <p className="text-xs text-slate-500 leading-relaxed max-w-sm mx-auto">
+              Synthesize your first customized active recall deck from your study notes, topics, or lecture material.
+            </p>
           </div>
-        </div>
-      )}
-
-      {/* Main Flashcard View */}
-      {cards.length === 0 ? (
-        <div className="p-12 text-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 space-y-3">
-          <Layers className="w-10 h-10 text-slate-400 mx-auto" />
-          <h3 className="text-sm font-semibold text-slate-800">No cards in this deck</h3>
           <button
             onClick={() => setIsModalOpen(true)}
-            className="px-4 py-2 rounded-lg bg-primary text-white text-xs font-medium"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold shadow-xs transition-all hover:scale-105 active:scale-95"
           >
-            Create Your First Deck
+            <Sparkles className="w-4 h-4" />
+            <span>Generate Your First AI Deck</span>
           </button>
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Card Top Metadata & Bookmark */}
-          <div className="flex items-center justify-between text-xs text-slate-400 font-medium px-1">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-700">Card {currentCardIdx + 1} of {cards.length}</span>
-              {currentCard?.mastery && (
-                <span className={`
-                  text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize
-                  ${currentCard.mastery === 'easy' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : ''}
-                  ${currentCard.mastery === 'good' ? 'bg-amber-50 text-amber-700 border border-amber-200' : ''}
-                  ${currentCard.mastery === 'hard' ? 'bg-rose-50 text-rose-700 border border-rose-200' : ''}
-                  ${currentCard.mastery === 'unseen' ? 'bg-slate-100 text-slate-600' : ''}
-                `}>
-                  {currentCard.mastery}
-                </span>
+          {/* Deck Selector Tabs & Actions */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar flex-1">
+                {sets.map((s, idx) => (
+                  <button
+                    key={s._id || s.id || idx}
+                    onClick={() => {
+                      setActiveSetIdx(idx);
+                      setCurrentCardIdx(0);
+                      setIsFlipped(false);
+                    }}
+                    className={`
+                      px-3.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all
+                      ${activeSetIdx === idx 
+                        ? 'bg-slate-900 text-white shadow-sm' 
+                        : 'bg-white border border-surface-border text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                      }
+                    `}
+                  >
+                    {s.title || s.topic}
+                  </button>
+                ))}
+              </div>
+
+              {currentSet && (
+                <button
+                  onClick={() => handleDeleteDeck(currentSet._id || currentSet.id)}
+                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                  title="Delete this deck"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
               )}
             </div>
 
-            <div className="flex items-center gap-3">
-              <span className="hidden sm:inline text-slate-400">
-                Press <kbd className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono text-[10px]">Space</kbd> to flip
-              </span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleToggleBookmark();
-                }}
-                className={`p-1.5 rounded-lg border transition-colors ${
-                  currentCard?.bookmarked 
-                    ? 'border-amber-300 bg-amber-50 text-amber-600' 
-                    : 'border-surface-border text-slate-400 hover:text-slate-700 hover:bg-slate-50'
-                }`}
-                title={currentCard?.bookmarked ? 'Bookmarked' : 'Bookmark card'}
-              >
-                <Bookmark className={`w-3.5 h-3.5 ${currentCard?.bookmarked ? 'fill-amber-500 text-amber-500' : ''}`} />
-              </button>
+            {/* Deck Mastery Progress Bar */}
+            <div className="p-3 bg-white border border-surface-border rounded-xl shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-xs">
+                  {masteryPercentage}%
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-800">Retention Mastery</p>
+                  <p className="text-[11px] text-slate-500">
+                    {masteredCount} Mastered • {goodCount} Good • {hardCount} Review Needed • {cards.length - masteredCount - goodCount - hardCount} Unseen
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleShuffle}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-surface-border bg-slate-50 hover:bg-slate-100 text-[11px] font-medium text-slate-700 transition-colors"
+                  title="Shuffle card order"
+                >
+                  <Shuffle className="w-3 h-3 text-slate-500" />
+                  Shuffle
+                </button>
+                <button
+                  onClick={handleRestart}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-surface-border bg-slate-50 hover:bg-slate-100 text-[11px] font-medium text-slate-700 transition-colors"
+                  title="Restart review from first card"
+                >
+                  <RefreshCw className="w-3 h-3 text-slate-500" />
+                  Restart
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* 3D Flip Card Container */}
-          <div
-            onClick={() => setIsFlipped(!isFlipped)}
-            className="cursor-pointer select-none perspective-1000 min-h-[20rem] sm:min-h-[22rem]"
-          >
-            <motion.div
-              animate={{ rotateY: isFlipped ? 180 : 0 }}
-              transition={{ duration: shouldReduceMotion ? 0 : 0.25, ease: 'easeOut' }}
-              style={{ transformStyle: 'preserve-3d' }}
-              className="relative w-full h-full min-h-[20rem] sm:min-h-[22rem] rounded-2xl border border-surface-border bg-white shadow-subtle hover:border-slate-300 transition-colors p-8 flex flex-col justify-between"
-            >
-              {/* Front Side */}
-              <div 
-                style={{ backfaceVisibility: 'hidden' }}
-                className={`absolute inset-0 p-8 flex flex-col justify-between ${isFlipped ? 'pointer-events-none' : ''}`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-primary bg-primary/10 border border-primary/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                    Question / Challenge
+          {/* Cards View */}
+          {cards.length > 0 && currentCard && (
+            <div className="space-y-4">
+              {/* Card Top Metadata & Bookmark */}
+              <div className="flex items-center justify-between text-xs text-slate-400 font-medium px-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-700">Card {currentCardIdx + 1} of {cards.length}</span>
+                  {currentCard?.mastery && (
+                    <span className={`
+                      text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize
+                      ${currentCard.mastery === 'easy' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : ''}
+                      ${currentCard.mastery === 'good' ? 'bg-amber-50 text-amber-700 border border-amber-200' : ''}
+                      ${currentCard.mastery === 'hard' ? 'bg-rose-50 text-rose-700 border border-rose-200' : ''}
+                      ${currentCard.mastery === 'unseen' ? 'bg-slate-100 text-slate-600' : ''}
+                    `}>
+                      {currentCard.mastery}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="hidden sm:inline text-slate-400">
+                    Press <kbd className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono text-[10px]">Space</kbd> to flip
                   </span>
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                    <RotateCw className="w-3.5 h-3.5" />
-                    <span>Flip</span>
-                  </div>
-                </div>
-
-                <div className="my-auto text-center px-4">
-                  <h3 className="text-base sm:text-xl font-bold text-slate-900 leading-relaxed">
-                    {currentCard?.front}
-                  </h3>
-                </div>
-
-                <div className="text-center text-xs text-slate-400">
-                  Click card or press <kbd className="bg-slate-100 px-1 py-0.5 rounded text-slate-600 font-mono text-[10px]">Space</kbd> to reveal answer
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleBookmark();
+                    }}
+                    className={`p-1.5 rounded-lg border transition-colors ${
+                      currentCard?.bookmarked 
+                        ? 'border-amber-300 bg-amber-50 text-amber-600' 
+                        : 'border-surface-border text-slate-400 hover:text-slate-700 hover:bg-slate-50'
+                    }`}
+                    title={currentCard?.bookmarked ? 'Bookmarked' : 'Bookmark card'}
+                  >
+                    <Bookmark className={`w-3.5 h-3.5 ${currentCard?.bookmarked ? 'fill-amber-500 text-amber-500' : ''}`} />
+                  </button>
                 </div>
               </div>
 
-              {/* Back Side */}
+              {/* 3D Flip Card Container */}
               <div
-                style={{ 
-                  backfaceVisibility: 'hidden', 
-                  transform: 'rotateY(180deg)' 
-                }}
-                className={`absolute inset-0 p-8 flex flex-col justify-between bg-slate-50/90 rounded-2xl ${!isFlipped ? 'pointer-events-none' : ''}`}
+                onClick={() => setIsFlipped(!isFlipped)}
+                className="cursor-pointer select-none perspective-1000 min-h-[20rem] sm:min-h-[22rem]"
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                    Core Answer & Breakdown
-                  </span>
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                    <RotateCw className="w-3.5 h-3.5" />
-                    <span>Prompt</span>
-                  </div>
-                </div>
-
-                <div className="my-auto text-center px-4">
-                  <p className="text-xs sm:text-base text-slate-800 leading-relaxed font-medium">
-                    {currentCard?.back}
-                  </p>
-                </div>
-
-                {/* Leitner Spaced Repetition Rating Buttons */}
-                <div 
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex items-center justify-center gap-2 pt-2 border-t border-slate-200"
+                <motion.div
+                  animate={{ rotateY: isFlipped ? 180 : 0 }}
+                  transition={{ duration: shouldReduceMotion ? 0 : 0.25, ease: 'easeOut' }}
+                  style={{ transformStyle: 'preserve-3d' }}
+                  className="relative w-full h-full min-h-[20rem] sm:min-h-[22rem] rounded-2xl border border-surface-border bg-white shadow-subtle hover:border-slate-300 transition-colors p-8 flex flex-col justify-between"
                 >
-                  <span className="text-[11px] font-medium text-slate-500 mr-1 hidden sm:inline">Rate Recall:</span>
-                  <button
-                    onClick={() => handleRateMastery('hard')}
-                    className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold transition-all hover:scale-105 active:scale-95"
-                    title="Press '1' or 'H'"
+                  {/* Front Side */}
+                  <div 
+                    style={{ backfaceVisibility: 'hidden' }}
+                    className={`absolute inset-0 p-8 flex flex-col justify-between ${isFlipped ? 'pointer-events-none' : ''}`}
                   >
-                    🔴 Hard
-                  </button>
-                  <button
-                    onClick={() => handleRateMastery('good')}
-                    className="px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-semibold transition-all hover:scale-105 active:scale-95"
-                    title="Press '2' or 'G'"
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold text-primary bg-primary/10 border border-primary/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                        Question / Challenge
+                      </span>
+                      <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                        <RotateCw className="w-3.5 h-3.5" />
+                        <span>Flip</span>
+                      </div>
+                    </div>
+
+                    <div className="my-auto text-center px-4">
+                      <h3 className="text-base sm:text-xl font-bold text-slate-900 leading-relaxed">
+                        {currentCard?.front}
+                      </h3>
+                    </div>
+
+                    <div className="text-center text-xs text-slate-400">
+                      Click card or press <kbd className="bg-slate-100 px-1 py-0.5 rounded text-slate-600 font-mono text-[10px]">Space</kbd> to reveal answer
+                    </div>
+                  </div>
+
+                  {/* Back Side */}
+                  <div
+                    style={{ 
+                      backfaceVisibility: 'hidden', 
+                      transform: 'rotateY(180deg)' 
+                    }}
+                    className={`absolute inset-0 p-8 flex flex-col justify-between bg-slate-50/90 rounded-2xl ${!isFlipped ? 'pointer-events-none' : ''}`}
                   >
-                    🟡 Good
-                  </button>
-                  <button
-                    onClick={() => handleRateMastery('easy')}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-semibold transition-all hover:scale-105 active:scale-95"
-                    title="Press '3' or 'E'"
-                  >
-                    🟢 Easy (Mastered)
-                  </button>
-                </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                        Core Answer & Breakdown
+                      </span>
+                      <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                        <RotateCw className="w-3.5 h-3.5" />
+                        <span>Prompt</span>
+                      </div>
+                    </div>
+
+                    <div className="my-auto text-center px-4">
+                      <p className="text-xs sm:text-base text-slate-800 leading-relaxed font-medium">
+                        {currentCard?.back}
+                      </p>
+                    </div>
+
+                    {/* Leitner Spaced Repetition Rating Buttons */}
+                    <div 
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center justify-center gap-2 pt-2 border-t border-slate-200"
+                    >
+                      <span className="text-[11px] font-medium text-slate-500 mr-1 hidden sm:inline">Rate Recall:</span>
+                      <button
+                        onClick={() => handleRateMastery('hard')}
+                        className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold transition-all hover:scale-105 active:scale-95"
+                        title="Press '1' or 'H'"
+                      >
+                        🔴 Hard
+                      </button>
+                      <button
+                        onClick={() => handleRateMastery('good')}
+                        className="px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-semibold transition-all hover:scale-105 active:scale-95"
+                        title="Press '2' or 'G'"
+                      >
+                        🟡 Good
+                      </button>
+                      <button
+                        onClick={() => handleRateMastery('easy')}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-semibold transition-all hover:scale-105 active:scale-95"
+                        title="Press '3' or 'E'"
+                      >
+                        🟢 Easy (Mastered)
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
               </div>
-            </motion.div>
-          </div>
 
-          {/* Navigation Controls */}
-          <div className="flex items-center justify-center gap-4 pt-2">
-            <button
-              onClick={handlePrev}
-              className="p-3 rounded-full border border-surface-border bg-white text-slate-700 hover:bg-slate-50 transition-all hover:scale-105 active:scale-95 shadow-xs"
-              aria-label="Previous card"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
+              {/* Navigation Controls */}
+              <div className="flex items-center justify-center gap-4 pt-2">
+                <button
+                  onClick={handlePrev}
+                  className="p-3 rounded-full border border-surface-border bg-white text-slate-700 hover:bg-slate-50 transition-all hover:scale-105 active:scale-95 shadow-xs"
+                  aria-label="Previous card"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
 
-            <button
-              onClick={() => setIsFlipped(!isFlipped)}
-              className="px-6 py-2.5 rounded-lg border border-surface-border bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-all shadow-xs"
-            >
-              {isFlipped ? 'Show Question' : 'Reveal Answer'}
-            </button>
+                <button
+                  onClick={() => setIsFlipped(!isFlipped)}
+                  className="px-6 py-2.5 rounded-lg border border-surface-border bg-white text-slate-700 hover:bg-slate-50 text-xs font-semibold transition-all shadow-xs"
+                >
+                  {isFlipped ? 'Show Question' : 'Reveal Answer'}
+                </button>
 
-            <button
-              onClick={handleNext}
-              className="p-3 rounded-full border border-surface-border bg-white text-slate-700 hover:bg-slate-50 transition-all hover:scale-105 active:scale-95 shadow-xs"
-              aria-label="Next card"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+                <button
+                  onClick={handleNext}
+                  className="p-3 rounded-full border border-surface-border bg-white text-slate-700 hover:bg-slate-50 transition-all hover:scale-105 active:scale-95 shadow-xs"
+                  aria-label="Next card"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

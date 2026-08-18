@@ -5,6 +5,7 @@ const Flashcard = require('../models/Flashcard');
 const Quiz = require('../models/Quiz');
 const { upload } = require('../middleware/uploadMiddleware');
 const { authMiddleware } = require('../middleware/authMiddleware');
+const { getUserDailyUsage, recordGeneration } = require('../middleware/generationLimiter');
 const { 
   generateQuizFromContent, 
   regenerateQuestionAI, 
@@ -16,9 +17,30 @@ const { scrapeUrlContent, extractYoutubeContent } = require('../services/webScra
 const { mockDB } = require('../models/store');
 const { v4: uuidv4 } = require('uuid');
 
-// 1. Generate Quiz from 7 Input Modalities with strict question count enforcement & Credential ID
+// 0. Live Daily Generation Status & Quota
+router.get('/status', authMiddleware, (req, res) => {
+  const userId = req.user?._id || req.user?.id || req.headers['x-user-id'];
+  const userEmail = req.user?.email || req.headers['x-user-email'];
+  const usage = getUserDailyUsage(userId, userEmail, req.user, req.headers);
+  res.json({ success: true, ...usage });
+});
+
+// 1. Generate Quiz from 7 Input Modalities with Daily Rate Limit & Credential ID
 router.post('/quiz', upload.single('file'), authMiddleware, async (req, res, next) => {
   try {
+    const userId = req.user?._id || req.user?.id || req.headers['x-user-id'];
+    const userEmail = req.user?.email || req.headers['x-user-email'];
+
+    // Rate Limit Enforcement (10 gens / day per user, Admin exempt)
+    const usage = getUserDailyUsage(userId, userEmail, req.user, req.headers);
+    if (!usage.canGenerate) {
+      return res.status(429).json({
+        success: false,
+        message: 'You have reached your daily limit of 10 AI quiz generations today. Your limit resets at midnight UTC, or upgrade for unlimited generations.',
+        ...usage
+      });
+    }
+
     const {
       sourceType = 'text',
       text = '',
@@ -35,7 +57,7 @@ router.post('/quiz', upload.single('file'), authMiddleware, async (req, res, nex
     const parsedBloomLevels = typeof bloomLevels === 'string' ? bloomLevels.split(',').map(s => s.trim()) : bloomLevels;
     const parsedQuestionTypes = typeof questionTypes === 'string' ? questionTypes.split(',').map(s => s.trim()) : questionTypes;
     
-    // Support 5, 10, 15, 20, 30, 50 up to 50 questions
+    // Support 5, 10, 15, 20, 30, 50 questions
     const requestedCount = Math.min(50, Math.max(3, parseInt(questionCount, 10) || 5));
 
     let extractedContent = (text || '').trim();
@@ -84,7 +106,6 @@ router.post('/quiz', upload.single('file'), authMiddleware, async (req, res, nex
       });
     }
 
-    const userId = req.user?._id || req.user?.id || req.headers['x-user-id'];
     const userName = req.headers['x-user-name']
       ? decodeURIComponent(req.headers['x-user-name'])
       : (req.user?.name || 'User');
@@ -118,9 +139,13 @@ router.post('/quiz', upload.single('file'), authMiddleware, async (req, res, nex
 
     mockDB.quizzes.unshift(savedQuiz);
 
+    // Record Generation Usage
+    const updatedUsage = recordGeneration(userId, userEmail, req.user, req.headers);
+
     res.status(201).json({
       success: true,
       quiz: savedQuiz,
+      quota: updatedUsage,
       message: `Successfully synthesized ${savedQuiz.questions.length} questions grounded in your study material!`
     });
   } catch (error) {

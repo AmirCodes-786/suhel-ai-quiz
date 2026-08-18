@@ -1,5 +1,10 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
+const Quiz = require('../models/Quiz');
+const Attempt = require('../models/Attempt');
+const Flashcard = require('../models/Flashcard');
+const Certificate = require('../models/Certificate');
 const { mockDB } = require('../models/store');
 const { authMiddleware } = require('../middleware/authMiddleware');
 
@@ -31,14 +36,47 @@ function formatStudyTime(totalSeconds) {
   return `${minutes}m`;
 }
 
-router.get('/', authMiddleware, (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
   const userId = req.user?._id || req.user?.id || req.headers['x-user-id'];
   const range = req.query.range || '7d';
 
-  // 1. Fetch Real User Data (match strictly by authenticated user ID)
-  const userQuizzes = mockDB.quizzes.filter(q => q.creator === userId);
-  const userAttempts = mockDB.attempts.filter(a => a.userId === userId);
-  const userFlashcards = mockDB.flashcards.filter(f => f.userId === userId);
+  let userQuizzes = [];
+  let userAttempts = [];
+  let userFlashcards = [];
+  let userCertificates = [];
+
+  // Query MongoDB Atlas live if connected
+  try {
+    if (mongoose.connection.readyState === 1) {
+      const [dbQuizzes, dbAttempts, dbFlashcards, dbCertificates] = await Promise.all([
+        Quiz.find({ $or: [{ creator: userId }, { isPublic: true }] }).sort({ createdAt: -1 }).lean(),
+        Attempt.find({ userId }).sort({ createdAt: -1 }).lean(),
+        Flashcard.find({ userId }).sort({ createdAt: -1 }).lean(),
+        Certificate.find({ userId }).sort({ createdAt: -1 }).lean()
+      ]);
+
+      if (dbQuizzes && dbQuizzes.length > 0) userQuizzes = dbQuizzes;
+      if (dbAttempts && dbAttempts.length > 0) userAttempts = dbAttempts;
+      if (dbFlashcards && dbFlashcards.length > 0) userFlashcards = dbFlashcards;
+      if (dbCertificates && dbCertificates.length > 0) userCertificates = dbCertificates;
+    }
+  } catch (err) {
+    console.warn('Dashboard MongoDB query warning, falling back to in-memory store:', err.message);
+  }
+
+  // Fallback to in-memory store if DB had nothing
+  if (userQuizzes.length === 0) {
+    userQuizzes = mockDB.quizzes.filter(q => q.creator === userId || q.isPublic);
+  }
+  if (userAttempts.length === 0) {
+    userAttempts = mockDB.attempts.filter(a => a.userId === userId);
+  }
+  if (userFlashcards.length === 0) {
+    userFlashcards = mockDB.flashcards.filter(f => f.userId === userId);
+  }
+  if (userCertificates.length === 0) {
+    userCertificates = mockDB.certificates.filter(c => c.userId === userId);
+  }
 
   const isNewUser = userQuizzes.length === 0 && userAttempts.length === 0;
 
@@ -79,7 +117,6 @@ router.get('/', authMiddleware, (req, res) => {
   const avgScore = userAttempts.length > 0 ? Math.round(totalScoreSum / userAttempts.length) : 0;
   const accuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : (userAttempts.length > 0 ? avgScore : 0);
 
-  // Real comparative diff
   let averageScoreDiff = 'No previous baseline';
   if (currentPeriodScores.length > 0 && previousPeriodScores.length > 0) {
     const currAvg = currentPeriodScores.reduce((a, b) => a + b, 0) / currentPeriodScores.length;
@@ -98,15 +135,13 @@ router.get('/', authMiddleware, (req, res) => {
     studyTime: formatStudyTime(totalSeconds),
     studyTimeContext: `+${formatStudyTime(studyTimeThisWeek)} this week`,
     accuracy: accuracy,
-    accuracyContext: totalAnswered > 0 ? `Across ${totalAnswered} questions` : 'No questions answered yet'
+    accuracyContext: totalAnswered > 0 ? `Across ${totalAnswered} questions` : 'No questions answered yet',
+    certificatesEarned: userCertificates.length
   };
 
-  // 3. Real Performance Trend Data (Strictly from real attempts)
+  // 3. Real Performance Trend Data
   const performance = [];
-  const daysCount = range === '90d' ? 90 : (range === '30d' ? 30 : 7);
-
   if (range === '7d') {
-    // Generate 7 days labels (e.g. Mon, Tue...)
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now - i * 24 * 60 * 60 * 1000);
       const dayLabel = d.toLocaleDateString('en-US', { weekday: 'short' });
@@ -129,7 +164,6 @@ router.get('/', authMiddleware, (req, res) => {
       });
     }
   } else if (range === '30d') {
-    // 4 Weeks
     for (let w = 4; w >= 1; w--) {
       const weekStart = now - w * 7 * 24 * 60 * 60 * 1000;
       const weekEnd = now - (w - 1) * 7 * 24 * 60 * 60 * 1000;
@@ -149,7 +183,6 @@ router.get('/', authMiddleware, (req, res) => {
       });
     }
   } else {
-    // 3 Months
     for (let m = 3; m >= 1; m--) {
       const monthStart = now - m * 30 * 24 * 60 * 60 * 1000;
       const monthEnd = now - (m - 1) * 30 * 24 * 60 * 60 * 1000;
@@ -170,7 +203,7 @@ router.get('/', authMiddleware, (req, res) => {
     }
   }
 
-  // 4. Real Topic Mastery (Calculated from user's quizzes and attempts)
+  // 4. Real Topic Mastery
   const categoryStats = {};
   userQuizzes.forEach(q => {
     const cat = q.category || 'General';
@@ -211,6 +244,7 @@ router.get('/', authMiddleware, (req, res) => {
       category: q.category || 'General',
       difficulty: q.difficulty || 'Medium',
       questionCount: q.questions?.length || 0,
+      credentialId: q.credentialId,
       score: lastAttempt ? lastAttempt.percentage : null,
       date: getTimeAgo(q.createdAt),
       status: lastAttempt ? 'Completed' : 'Ready'
@@ -236,7 +270,7 @@ router.get('/', authMiddleware, (req, res) => {
     };
   }
 
-  // 7. Real Weak Topics (Computed strictly from question answers where isCorrect === false)
+  // 7. Real Weak Topics
   const weakTopicCounts = {};
   userAttempts.forEach(att => {
     if (att.answers && Array.isArray(att.answers)) {
@@ -263,7 +297,7 @@ router.get('/', authMiddleware, (req, res) => {
     .sort((a, b) => a.accuracy - b.accuracy)
     .slice(0, 4);
 
-  // 8. Real Activity Feed (Aggregated strictly from real events)
+  // 8. Real Activity Feed
   const recentActivity = [];
   userAttempts.forEach(att => {
     recentActivity.push({

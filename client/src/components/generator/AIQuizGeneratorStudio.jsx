@@ -12,9 +12,13 @@ import {
   ArrowRight,
   CheckCircle2,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  Zap,
+  ShieldCheck,
+  Infinity as InfinityIcon
 } from 'lucide-react';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import PageTransition from '../common/PageTransition';
@@ -36,6 +40,7 @@ const GENERATION_STEPS = [
 export default function AIQuizGeneratorStudio() {
   const navigate = useNavigate();
   const toast = useToast();
+  const { user } = useAuth();
   const loadingCardRef = useRef(null);
 
   const [sourceType, setSourceType] = useState('text');
@@ -57,6 +62,40 @@ export default function AIQuizGeneratorStudio() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Daily Quota State
+  const [quota, setQuota] = useState({
+    dailyLimit: 10,
+    generationsUsed: 0,
+    generationsLeft: 10,
+    isAdmin: false,
+    canGenerate: true
+  });
+  const [quotaLoading, setQuotaLoading] = useState(true);
+
+  useEffect(() => {
+    fetchQuotaStatus();
+  }, [user]);
+
+  const fetchQuotaStatus = async () => {
+    try {
+      setQuotaLoading(true);
+      const res = await api.get('/generate/status');
+      if (res.data?.success) {
+        setQuota({
+          dailyLimit: res.data.dailyLimit || 10,
+          generationsUsed: res.data.generationsUsed || 0,
+          generationsLeft: res.data.generationsLeft ?? 10,
+          isAdmin: Boolean(res.data.isAdmin),
+          canGenerate: res.data.canGenerate !== false
+        });
+      }
+    } catch (e) {
+      console.warn('Quota fetch warning:', e.message);
+    } finally {
+      setQuotaLoading(false);
+    }
+  };
 
   // Auto-scroll and focus to loading indicator whenever generation starts
   useEffect(() => {
@@ -91,6 +130,11 @@ export default function AIQuizGeneratorStudio() {
 
   const handleGenerate = async (e) => {
     if (e) e.preventDefault();
+    if (!quota.isAdmin && quota.generationsLeft <= 0) {
+      toast.error('You have reached your daily limit of 10 AI quiz generations.');
+      return;
+    }
+
     try {
       setIsGenerating(true);
       setErrorMsg('');
@@ -118,6 +162,14 @@ export default function AIQuizGeneratorStudio() {
       });
 
       if (res.data?.success && res.data.quiz) {
+        if (res.data.quota) {
+          setQuota(prev => ({
+            ...prev,
+            generationsUsed: res.data.quota.generationsUsed ?? prev.generationsUsed + 1,
+            generationsLeft: res.data.quota.generationsLeft ?? Math.max(0, prev.generationsLeft - 1),
+            isAdmin: Boolean(res.data.quota.isAdmin)
+          }));
+        }
         toast.success(`Generated ${res.data.quiz.questions?.length || questionCount} high-quality questions.`);
         navigate(`/quiz/${res.data.quiz._id || res.data.quiz.id}`);
       } else {
@@ -133,14 +185,52 @@ export default function AIQuizGeneratorStudio() {
     }
   };
 
+  const isUnlimited = quota.isAdmin;
+  const leftCount = typeof quota.generationsLeft === 'number' ? quota.generationsLeft : 10;
+  const progressPercent = isUnlimited ? 100 : Math.min(100, Math.max(0, (leftCount / quota.dailyLimit) * 100));
+
   return (
     <PageTransition className="max-w-3xl mx-auto space-y-4 sm:space-y-6 pb-6">
-      {/* Header */}
-      <div className="border-b border-surface-border pb-3 sm:pb-4">
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">AI Quiz Generator</h1>
-        <p className="text-xs sm:text-sm text-slate-500 mt-1 leading-relaxed">
-          Import your study material and create a targeted, source-grounded assessment in seconds.
-        </p>
+      {/* Header & Live Daily Quota Badge */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-surface-border pb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">AI Quiz Generator</h1>
+            <span className="text-[11px] font-semibold text-primary bg-primary/10 px-2.5 py-0.5 rounded-full border border-primary/20 flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-primary" /> Studio
+            </span>
+          </div>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1 leading-relaxed">
+            Import your study material and create a targeted, source-grounded assessment in seconds.
+          </p>
+        </div>
+
+        {/* Real-Time Animated Quota Counter */}
+        <div className="flex items-center gap-2.5 bg-gradient-to-r from-slate-900 to-indigo-950 text-white px-3.5 py-2 rounded-xl shadow-md border border-indigo-800/40 self-start sm:self-auto">
+          <div className="w-6 h-6 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center shrink-0">
+            {isUnlimited ? <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> : <Zap className="w-3.5 h-3.5 fill-amber-400 text-amber-400 animate-pulse" />}
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold font-mono text-white">
+                {isUnlimited ? 'UNLIMITED' : `${leftCount}/${quota.dailyLimit}`}
+              </span>
+              <span className="text-[10px] uppercase tracking-wider text-indigo-200/80 font-medium">
+                {isUnlimited ? 'Admin Access' : 'Gens Left Today'}
+              </span>
+            </div>
+            {!isUnlimited && (
+              <div className="w-28 h-1 bg-slate-700 rounded-full mt-1 overflow-hidden">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progressPercent}%` }}
+                  transition={{ duration: 0.5, ease: 'easeOut' }}
+                  className={`h-full ${leftCount <= 2 ? 'bg-rose-500' : 'bg-emerald-400'}`}
+                />
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {errorMsg && (
@@ -165,7 +255,7 @@ export default function AIQuizGeneratorStudio() {
         </div>
       )}
 
-      {/* Generation Progress Overlay Card (Target of Auto-Scroll & Focus) */}
+      {/* Generation Progress Overlay Card */}
       <div ref={loadingCardRef} className="scroll-mt-4 sm:scroll-mt-6">
         <AnimatePresence>
           {isGenerating && (
@@ -306,7 +396,7 @@ export default function AIQuizGeneratorStudio() {
           </label>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-            {/* Number of Questions (5, 10, 15, 20, 30, 50) */}
+            {/* Number of Questions */}
             <div>
               <label className="block text-xs text-slate-600 mb-1 font-medium">Questions</label>
               <select
@@ -400,7 +490,7 @@ export default function AIQuizGeneratorStudio() {
         <div className="pt-2">
           <button
             type="submit"
-            disabled={isGenerating}
+            disabled={isGenerating || (!isUnlimited && leftCount <= 0)}
             className="w-full min-h-[48px] py-3.5 rounded-xl bg-primary hover:bg-primary-hover active:scale-[0.98] text-white font-semibold text-sm shadow-xs transition-all disabled:opacity-50 flex items-center justify-center gap-2 touch-manipulation"
           >
             {isGenerating ? (
@@ -408,6 +498,8 @@ export default function AIQuizGeneratorStudio() {
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 <span>Generating {questionCount} Questions...</span>
               </div>
+            ) : !isUnlimited && leftCount <= 0 ? (
+              <span>Daily Limit Reached (10/10 Used Today)</span>
             ) : (
               <>
                 <Sparkles className="w-4 h-4 shrink-0" />
