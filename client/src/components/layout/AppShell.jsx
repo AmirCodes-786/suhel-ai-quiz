@@ -8,17 +8,26 @@ import { motion, AnimatePresence } from 'framer-motion';
 export default function AppShell() {
   const location = useLocation();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
 
   const isLanding = location.pathname === '/';
   const isQuizPlayer = location.pathname.startsWith('/quiz/') || location.pathname.startsWith('/battle-room/');
 
-  // Reset scroll and close mobile drawer on route changes
+  // Reset scroll, close mobile drawer, and pulse top navigation bar on route changes
   useEffect(() => {
     setIsMobileNavOpen(false);
+    setIsNavigating(true);
+
     const mainEl = document.getElementById('app-main-content');
     if (mainEl) {
       mainEl.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     }
+
+    const timer = setTimeout(() => {
+      setIsNavigating(false);
+    }, 280);
+
+    return () => clearTimeout(timer);
   }, [location.pathname]);
 
   // Landing Page: Full document layout
@@ -32,9 +41,21 @@ export default function AppShell() {
     );
   }
 
-  // Authenticated SaaS Application: Rock-solid fixed sidebar & independent scrollable main panel
   return (
-    <div className="h-screen w-screen overflow-hidden bg-background text-foreground flex flex-col selection:bg-primary-light selection:text-primary">
+    <div className="h-screen w-screen overflow-hidden bg-background text-foreground flex flex-col selection:bg-primary-light selection:text-primary relative">
+      {/* Top Route Navigation Indicator Bar */}
+      <AnimatePresence>
+        {isNavigating && (
+          <motion.div
+            initial={{ scaleX: 0, transformOrigin: '0% 50%' }}
+            animate={{ scaleX: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            className="fixed top-0 left-0 right-0 h-[2.5px] bg-gradient-to-r from-primary via-indigo-500 to-amber-400 z-50 shadow-xs"
+          />
+        )}
+      </AnimatePresence>
+
       <Navbar 
         onToggleMobileNav={() => setIsMobileNavOpen(!isMobileNavOpen)} 
         isMobileNavOpen={isMobileNavOpen}
@@ -81,7 +102,11 @@ export default function AppShell() {
           className="flex-1 h-full overflow-y-auto overflow-x-hidden flex flex-col justify-between"
         >
           <main className={isQuizPlayer ? 'w-full flex-1' : 'p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full flex-1'}>
-            <Outlet />
+            <AnimatePresence mode="wait">
+              <div key={location.pathname} className="w-full">
+                <Outlet />
+              </div>
+            </AnimatePresence>
           </main>
           {!isQuizPlayer && <Footer />}
         </div>

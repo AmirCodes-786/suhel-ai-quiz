@@ -2,9 +2,9 @@ import React from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 
 /**
- * Reusable PageTransition wrapper
- * Provides a fast, subtle fade and vertical displacement (180ms).
- * Automatically disables motion if the user prefers reduced motion.
+ * Premium PageTransition wrapper
+ * Provides silky-smooth cubic-bezier fade & vertical drift.
+ * Automatically respects reduced motion preferences.
  */
 export default function PageTransition({ children, className = '' }) {
   const shouldReduceMotion = useReducedMotion();
@@ -12,22 +12,26 @@ export default function PageTransition({ children, className = '' }) {
   const variants = {
     initial: {
       opacity: shouldReduceMotion ? 1 : 0,
-      y: shouldReduceMotion ? 0 : 6
+      y: shouldReduceMotion ? 0 : 12,
+      scale: shouldReduceMotion ? 1 : 0.995
     },
     animate: {
       opacity: 1,
       y: 0,
+      scale: 1,
       transition: {
-        duration: shouldReduceMotion ? 0 : 0.18,
-        ease: [0.25, 0.1, 0.25, 1]
+        duration: shouldReduceMotion ? 0 : 0.25,
+        ease: [0.22, 1, 0.36, 1], // Smooth custom cubic bezier
+        staggerChildren: 0.05
       }
     },
     exit: {
       opacity: shouldReduceMotion ? 1 : 0,
-      y: shouldReduceMotion ? 0 : -4,
+      y: shouldReduceMotion ? 0 : -8,
+      scale: shouldReduceMotion ? 1 : 0.995,
       transition: {
-        duration: shouldReduceMotion ? 0 : 0.12,
-        ease: 'easeIn'
+        duration: shouldReduceMotion ? 0 : 0.15,
+        ease: [0.4, 0, 1, 1]
       }
     }
   };
@@ -38,7 +42,7 @@ export default function PageTransition({ children, className = '' }) {
       initial="initial"
       animate="animate"
       exit="exit"
-      className={className}
+      className={`w-full ${className}`}
     >
       {children}
     </motion.div>
