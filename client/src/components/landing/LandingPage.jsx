@@ -140,14 +140,6 @@ export default function LandingPage() {
     setActiveDemoIdx((prev) => (prev + 1) % DEMO_QUESTIONS.length);
   };
 
-  const handleNavClick = (sectionId) => {
-    setIsMobileMenuOpen(false);
-    const target = document.getElementById(sectionId);
-    if (target) {
-      target.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
   return (
     <PageTransition className="min-h-screen bg-[#FDFDFC] text-slate-900 selection:bg-primary-light selection:text-primary relative">
       {/* Dynamic Ambient Background Glows */}
@@ -186,11 +178,11 @@ export default function LandingPage() {
 
           {/* Desktop Navigation Links */}
           <nav className="hidden md:flex items-center gap-7 text-xs font-semibold text-slate-600 uppercase tracking-wider">
-            <button type="button" onClick={() => handleNavClick('demo')} className="hover:text-primary transition-colors cursor-pointer font-semibold uppercase">Live Demo</button>
-            <button type="button" onClick={() => handleNavClick('features')} className="hover:text-primary transition-colors cursor-pointer font-semibold uppercase">Features</button>
-            <button type="button" onClick={() => handleNavClick('modes')} className="hover:text-primary transition-colors cursor-pointer font-semibold uppercase">Modes</button>
-            <button type="button" onClick={() => handleNavClick('pricing')} className="hover:text-primary transition-colors cursor-pointer font-semibold uppercase">Pricing</button>
-            <button type="button" onClick={() => handleNavClick('faq')} className="hover:text-primary transition-colors cursor-pointer font-semibold uppercase">FAQ</button>
+            <a href="#demo" className="hover:text-primary transition-colors font-semibold uppercase">Live Demo</a>
+            <a href="#features" className="hover:text-primary transition-colors font-semibold uppercase">Features</a>
+            <a href="#modes" className="hover:text-primary transition-colors font-semibold uppercase">Modes</a>
+            <a href="#pricing" className="hover:text-primary transition-colors font-semibold uppercase">Pricing</a>
+            <a href="#faq" className="hover:text-primary transition-colors font-semibold uppercase">FAQ</a>
           </nav>
 
           <div className="flex items-center gap-2 sm:gap-3">
