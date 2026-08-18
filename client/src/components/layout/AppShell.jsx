@@ -11,7 +11,6 @@ export default function AppShell() {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
 
-  const isLanding = location.pathname === '/';
   const isQuizPlayer = location.pathname.startsWith('/quiz/') || location.pathname.startsWith('/battle-room/');
 
   // Reset scroll, close mobile drawer, and pulse top navigation bar on route changes
@@ -26,23 +25,10 @@ export default function AppShell() {
 
     const timer = setTimeout(() => {
       setIsNavigating(false);
-    }, 300);
+    }, 280);
 
     return () => clearTimeout(timer);
   }, [location.pathname]);
-
-  // Landing Page: Full document layout
-  if (isLanding) {
-    return (
-      <div className="min-h-screen bg-background text-foreground flex flex-col selection:bg-primary-light selection:text-primary">
-        <main className="flex-1 w-full">
-          <AnimatePresence mode="wait" initial={false}>
-            {outlet && React.cloneElement(outlet, { key: location.pathname })}
-          </AnimatePresence>
-        </main>
-      </div>
-    );
-  }
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-background text-foreground flex flex-col selection:bg-primary-light selection:text-primary relative">
@@ -53,7 +39,7 @@ export default function AppShell() {
             initial={{ scaleX: 0, transformOrigin: '0% 50%' }}
             animate={{ scaleX: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.28, ease: 'easeOut' }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
             className="fixed top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-primary via-indigo-500 to-amber-400 z-50 shadow-sm"
           />
         )}

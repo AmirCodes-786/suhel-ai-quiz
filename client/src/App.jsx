@@ -41,20 +41,17 @@ export default function App() {
           <ToastProvider>
             <Suspense fallback={<RouteLoadingFallback />}>
               <Routes>
-                {/* Public Authentication & Verification Routes */}
+                {/* Public Top-Level Routes */}
+                <Route path="/" element={<LandingPage />} />
                 <Route path="/sign-in/*" element={<SignInPage />} />
                 <Route path="/sign-up/*" element={<SignUpPage />} />
                 <Route path="/verify/:code" element={<PublicVerifyPage />} />
                 <Route path="/verify" element={<Navigate to="/certificates" replace />} />
 
-                {/* Main Application Routes */}
-                <Route path="/" element={<AppShell />}>
-                  {/* Public Landing Page */}
-                  <Route index element={<LandingPage />} />
-
-                  {/* Protected Application Routes */}
+                {/* Authenticated Dashboard App Shell Routes */}
+                <Route element={<AppShell />}>
                   <Route
-                    path="dashboard"
+                    path="/dashboard"
                     element={
                       <ProtectedRoute>
                         <DashboardOverview />
