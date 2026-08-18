@@ -2,6 +2,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const Groq = require('groq-sdk');
 const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
+const { balanceAndValidateQuizQuestions } = require('./answerBalancer');
 
 // Initialize API clients
 let geminiClient = null;
@@ -468,17 +469,18 @@ async function generateQuizFromContent({
     throw new Error(`AI generated ${collectedQuestions.length} valid unique questions from this source, but ${targetCount} were requested. Please provide more detailed study material or choose a lower question count.`);
   }
 
-  const finalQuestions = collectedQuestions.slice(0, targetCount);
+  const rawFinalQuestions = collectedQuestions.slice(0, targetCount);
+  const balancedQuestions = balanceAndValidateQuizQuestions(rawFinalQuestions);
 
   return {
     title: title || `${category} Assessment`,
-    description: `Comprehensive AI-generated assessment covering ${category} with ${finalQuestions.length} questions.`,
+    description: `Comprehensive AI-generated assessment covering ${category} with ${balancedQuestions.length} questions.`,
     category,
     difficulty,
-    timeLimit: Math.max(5, Math.ceil(finalQuestions.length * 1.5)),
+    timeLimit: Math.max(5, Math.ceil(balancedQuestions.length * 1.5)),
     bloomLevels: Array.isArray(bloomLevels) ? bloomLevels : ['Understand', 'Apply'],
     tags: [category, 'Assessment', 'QuizForge AI'],
-    questions: finalQuestions
+    questions: balancedQuestions
   };
 }
 
@@ -550,11 +552,12 @@ Rules:
     }
 
     if (validQuestions.length >= 3) {
+      const balancedBattleQuestions = balanceAndValidateQuizQuestions(validQuestions);
       return {
         title: `${cleanTopic} Arena Battle`,
         category: cleanTopic,
         difficulty,
-        questions: validQuestions
+        questions: balancedBattleQuestions
       };
     }
   } catch (err) {
