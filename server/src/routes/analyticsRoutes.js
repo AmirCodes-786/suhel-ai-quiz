@@ -7,33 +7,37 @@ const Flashcard = require('../models/Flashcard');
 const { mockDB } = require('../models/store');
 const { authMiddleware } = require('../middleware/authMiddleware');
 
-// 1. Live Real-Time Student Analytics
+// 1. Live Real-Time Student Analytics (Strictly scoped to authenticated user)
 router.get('/student', authMiddleware, async (req, res) => {
-  const userId = req.user?._id || req.user?.id || req.headers['x-user-id'];
+  const userId = req.user?._id || req.user?.id;
 
   let userAttempts = [];
   let userQuizzes = [];
   let userFlashcardSets = [];
+  let isDbQueried = false;
 
   // Query MongoDB Atlas if connected
   try {
     if (mongoose.connection.readyState === 1) {
-      userAttempts = await Attempt.find({ userId }).sort({ createdAt: 1 }).lean();
-      userQuizzes = await Quiz.find({ creator: userId }).lean();
-      userFlashcardSets = await Flashcard.find({ userId }).lean();
+      const [dbAttempts, dbQuizzes, dbFlashcards] = await Promise.all([
+        Attempt.find({ userId }).sort({ createdAt: 1 }).lean(),
+        Quiz.find({ $or: [{ creator: userId }, { userId: userId }] }).lean(),
+        Flashcard.find({ userId }).lean()
+      ]);
+
+      userAttempts = dbAttempts || [];
+      userQuizzes = dbQuizzes || [];
+      userFlashcardSets = dbFlashcards || [];
+      isDbQueried = true;
     }
   } catch (err) {
     console.warn('DB analytics fetch warning, using in-memory store:', err.message);
   }
 
-  // Fallback to in-memory store if DB query returned nothing
-  if (!userAttempts || userAttempts.length === 0) {
+  // Fallback to in-memory store only if DB query wasn't active
+  if (!isDbQueried) {
     userAttempts = mockDB.attempts.filter(a => a.userId === userId);
-  }
-  if (!userQuizzes || userQuizzes.length === 0) {
-    userQuizzes = mockDB.quizzes.filter(q => q.creator === userId);
-  }
-  if (!userFlashcardSets || userFlashcardSets.length === 0) {
+    userQuizzes = mockDB.quizzes.filter(q => q.creator === userId || q.userId === userId);
     userFlashcardSets = mockDB.flashcards.filter(f => f.userId === userId);
   }
 

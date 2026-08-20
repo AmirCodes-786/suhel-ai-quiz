@@ -119,6 +119,7 @@ router.post('/quiz', upload.single('file'), authMiddleware, async (req, res, nex
       credentialId: uniqueCredentialId,
       ...generatedQuiz,
       creator: userId,
+      userId: userId,
       creatorName: userName,
       isPublic: false,
       views: 1,

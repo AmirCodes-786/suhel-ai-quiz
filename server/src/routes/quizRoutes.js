@@ -40,28 +40,49 @@ function isAnswerCorrect(submitted, question) {
   return false;
 }
 
-// Get all quizzes (from MongoDB Atlas with fallback sync & credential ID guarantee)
-router.get('/', async (req, res) => {
-  try {
-    const { search, category, difficulty, isPublic, myQuizzes, userId } = req.query;
+// 1. GET /api/quizzes — Scoped strictly to authenticated user for personal library, or public marketplace when isPublic=true
+router.get('/', authMiddleware, async (req, res) => {
+  const currentUserId = req.user?._id || req.user?.id;
+  const { search, category, difficulty, isPublic } = req.query;
+  const isMarketplaceQuery = isPublic === 'true';
 
+  try {
     if (mongoose.connection.readyState === 1) {
       const query = {};
-      if (myQuizzes === 'true' && userId) query.creator = userId;
-      if (isPublic === 'true') query.isPublic = true;
-      if (category && category !== 'All') query.category = new RegExp(`^${category}$`, 'i');
-      if (difficulty && difficulty !== 'All') query.difficulty = new RegExp(`^${difficulty}$`, 'i');
-      if (search) {
-        query.$or = [
-          { title: { $regex: search, $options: 'i' } },
-          { description: { $regex: search, $options: 'i' } },
-          { category: { $regex: search, $options: 'i' } },
-          { credentialId: { $regex: search, $options: 'i' } }
+
+      if (isMarketplaceQuery) {
+        query.isPublic = true;
+      } else {
+        // PERSONAL QUIZ LIBRARY: Strict user data isolation by authenticated user ID
+        query.$or = [{ creator: currentUserId }, { userId: currentUserId }];
+      }
+
+      if (category && category !== 'All') {
+        query.category = new RegExp(`^${category}$`, 'i');
+      }
+
+      if (difficulty && difficulty !== 'All') {
+        query.difficulty = new RegExp(`^${difficulty}$`, 'i');
+      }
+
+      if (search && search.trim()) {
+        const s = search.trim();
+        const searchConditions = [
+          { title: { $regex: s, $options: 'i' } },
+          { description: { $regex: s, $options: 'i' } },
+          { category: { $regex: s, $options: 'i' } },
+          { credentialId: { $regex: s, $options: 'i' } }
         ];
+        if (query.$or) {
+          query.$and = [{ $or: query.$or }, { $or: searchConditions }];
+          delete query.$or;
+        } else {
+          query.$or = searchConditions;
+        }
       }
 
       let dbQuizzes = await Quiz.find(query).sort({ createdAt: -1 }).lean();
-      if (dbQuizzes && dbQuizzes.length > 0) {
+      if (dbQuizzes) {
         dbQuizzes = dbQuizzes.map(q => ({
           ...q,
           credentialId: q.credentialId || `QF-CR-${String(q._id).replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase()}`
@@ -74,22 +95,31 @@ router.get('/', async (req, res) => {
   }
 
   // Fallback to in-memory store
-  const { search, category, difficulty, isPublic, myQuizzes, userId } = req.query;
-  let results = mockDB.quizzes.map(q => ({
+  let results = [];
+  if (isMarketplaceQuery) {
+    results = mockDB.quizzes.filter(q => q.isPublic === true);
+  } else {
+    // PERSONAL LIBRARY: strictly current authenticated user
+    results = mockDB.quizzes.filter(q => (q.creator === currentUserId || q.userId === currentUserId));
+  }
+
+  results = results.map(q => ({
     ...q,
     credentialId: q.credentialId || `QF-CR-${String(q._id || q.id).replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase()}`
   }));
 
-  if (myQuizzes === 'true' && userId) {
-    results = results.filter(q => q.creator === userId);
-  } else if (isPublic === 'true') {
-    results = results.filter(q => q.isPublic !== false);
+  if (category && category !== 'All') {
+    results = results.filter(q => q.category && q.category.toLowerCase() === category.toLowerCase());
   }
 
-  if (search) {
-    const s = search.toLowerCase();
+  if (difficulty && difficulty !== 'All') {
+    results = results.filter(q => q.difficulty && q.difficulty.toLowerCase() === difficulty.toLowerCase());
+  }
+
+  if (search && search.trim()) {
+    const s = search.toLowerCase().trim();
     results = results.filter(q => 
-      q.title.toLowerCase().includes(s) || 
+      q.title?.toLowerCase().includes(s) || 
       q.description?.toLowerCase().includes(s) ||
       q.category?.toLowerCase().includes(s) ||
       q.credentialId?.toLowerCase().includes(s) ||
@@ -97,57 +127,67 @@ router.get('/', async (req, res) => {
     );
   }
 
-  if (category && category !== 'All') {
-    results = results.filter(q => q.category.toLowerCase() === category.toLowerCase());
-  }
-
-  if (difficulty && difficulty !== 'All') {
-    results = results.filter(q => q.difficulty.toLowerCase() === difficulty.toLowerCase());
-  }
-
   res.json({ success: true, count: results.length, quizzes: results });
 });
 
-// Get Quiz by ID
-router.get('/:id', async (req, res) => {
+// 2. GET /api/quizzes/:id — Strict ownership verification for private quizzes
+router.get('/:id', authMiddleware, async (req, res) => {
   const targetId = req.params.id;
+  const currentUserId = req.user?._id || req.user?.id;
+  const isAdmin = req.user?.role === 'admin';
+
+  let foundQuiz = null;
 
   try {
     if (mongoose.connection.readyState === 1) {
-      const dbQuiz = await Quiz.findOne({ 
+      foundQuiz = await Quiz.findOne({ 
         $or: [{ _id: targetId }, { id: targetId }, { credentialId: targetId.toUpperCase() }] 
       }).lean();
-      if (dbQuiz) {
-        await Quiz.updateOne({ _id: dbQuiz._id }, { $inc: { views: 1 } });
-        const withCred = {
-          ...dbQuiz,
-          credentialId: dbQuiz.credentialId || `QF-CR-${String(dbQuiz._id).replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase()}`
-        };
-        return res.json({ success: true, quiz: withCred });
-      }
     }
-  } catch (err) {}
+  } catch (err) {
+    console.warn('MongoDB get quiz by ID warning:', err.message);
+  }
 
-  const quiz = mockDB.quizzes.find(q => 
-    q._id === targetId || q.id === targetId || (q.credentialId && q.credentialId.toUpperCase() === targetId.toUpperCase())
-  );
-  if (!quiz) {
+  if (!foundQuiz) {
+    foundQuiz = mockDB.quizzes.find(q => 
+      q._id === targetId || q.id === targetId || (q.credentialId && q.credentialId.toUpperCase() === targetId.toUpperCase())
+    );
+  }
+
+  if (!foundQuiz) {
     return res.status(404).json({ success: false, message: 'Quiz not found' });
   }
-  quiz.views = (quiz.views || 0) + 1;
+
+  // Security check: If private, requester must be the creator/owner or admin
+  const isOwner = (foundQuiz.creator === currentUserId || foundQuiz.userId === currentUserId);
+  const isPublic = Boolean(foundQuiz.isPublic);
+
+  if (!isOwner && !isPublic && !isAdmin) {
+    return res.status(404).json({ success: false, message: 'Quiz not found' });
+  }
+
+  // Increment views
+  try {
+    if (mongoose.connection.readyState === 1 && foundQuiz._id) {
+      await Quiz.updateOne({ _id: foundQuiz._id }, { $inc: { views: 1 } });
+    }
+  } catch (e) {}
+  foundQuiz.views = (foundQuiz.views || 0) + 1;
+
   const withCred = {
-    ...quiz,
-    credentialId: quiz.credentialId || `QF-CR-${String(quiz._id || quiz.id).replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase()}`
+    ...foundQuiz,
+    credentialId: foundQuiz.credentialId || `QF-CR-${String(foundQuiz._id || foundQuiz.id).replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase()}`
   };
+
   res.json({ success: true, quiz: withCred });
 });
 
-// Create Quiz manually
+// 3. POST /api/quizzes — Create Quiz manually with authoritative authenticated ownership
 router.post('/', authMiddleware, async (req, res) => {
-  const userId = req.user?._id || req.user?.id || req.headers['x-user-id'];
-  const userName = req.headers['x-user-name']
+  const currentUserId = req.user?._id || req.user?.id;
+  const userName = req.user?.name || (req.headers['x-user-name']
     ? decodeURIComponent(req.headers['x-user-name'])
-    : (req.user?.name || 'User');
+    : 'User');
 
   const newQuizId = `quiz_${uuidv4().slice(0, 8)}`;
   const uniqueCredentialId = `QF-CR-${uuidv4().slice(0, 6).toUpperCase()}`;
@@ -160,9 +200,10 @@ router.post('/', authMiddleware, async (req, res) => {
     description: req.body.description || '',
     category: req.body.category || 'General',
     difficulty: req.body.difficulty || 'Medium',
-    creator: userId,
+    creator: currentUserId,
+    userId: currentUserId,
     creatorName: userName,
-    isPublic: req.body.isPublic || false,
+    isPublic: Boolean(req.body.isPublic),
     timeLimit: req.body.timeLimit || 10,
     bloomLevels: req.body.bloomLevels || ['Understand'],
     tags: req.body.tags || ['Custom'],
@@ -186,19 +227,164 @@ router.post('/', authMiddleware, async (req, res) => {
   res.status(201).json({ success: true, quiz: newQuiz });
 });
 
-// Delete Quiz
-router.delete('/:id', authMiddleware, async (req, res) => {
-  const userId = req.user?._id || req.user?.id || req.headers['x-user-id'];
+// 4. PUT /api/quizzes/:id — Update Quiz with strict ownership check
+router.put('/:id', authMiddleware, async (req, res) => {
+  const currentUserId = req.user?._id || req.user?.id;
   const targetId = req.params.id;
-  const targetQuiz = mockDB.quizzes.find(q => q._id === targetId || q.id === targetId);
+  const isAdmin = req.user?.role === 'admin';
 
-  if (targetQuiz && targetQuiz.creator && targetQuiz.creator !== userId && req.user?.role !== 'admin') {
+  let targetQuiz = null;
+  try {
+    if (mongoose.connection.readyState === 1) {
+      targetQuiz = await Quiz.findOne({ $or: [{ _id: targetId }, { id: targetId }] }).lean();
+    }
+  } catch (e) {}
+
+  if (!targetQuiz) {
+    targetQuiz = mockDB.quizzes.find(q => q._id === targetId || q.id === targetId);
+  }
+
+  if (!targetQuiz) {
+    return res.status(404).json({ success: false, message: 'Quiz not found' });
+  }
+
+  const isOwner = (targetQuiz.creator === currentUserId || targetQuiz.userId === currentUserId);
+  if (!isOwner && !isAdmin) {
     return res.status(403).json({ success: false, message: 'Access denied: You do not own this quiz' });
   }
 
-  const quizTitle = targetQuiz?.title || '';
+  const updateFields = {
+    title: req.body.title !== undefined ? req.body.title : targetQuiz.title,
+    description: req.body.description !== undefined ? req.body.description : targetQuiz.description,
+    category: req.body.category !== undefined ? req.body.category : targetQuiz.category,
+    difficulty: req.body.difficulty !== undefined ? req.body.difficulty : targetQuiz.difficulty,
+    timeLimit: req.body.timeLimit !== undefined ? req.body.timeLimit : targetQuiz.timeLimit,
+    isPublic: req.body.isPublic !== undefined ? Boolean(req.body.isPublic) : targetQuiz.isPublic,
+    questions: req.body.questions !== undefined ? req.body.questions : targetQuiz.questions,
+    tags: req.body.tags !== undefined ? req.body.tags : targetQuiz.tags
+  };
 
-  // 1. Remove Quiz from Store
+  try {
+    if (mongoose.connection.readyState === 1) {
+      await Quiz.updateOne({ $or: [{ _id: targetId }, { id: targetId }] }, { $set: updateFields });
+    }
+  } catch (e) {}
+
+  const inMemIndex = mockDB.quizzes.findIndex(q => q._id === targetId || q.id === targetId);
+  if (inMemIndex !== -1) {
+    mockDB.quizzes[inMemIndex] = { ...mockDB.quizzes[inMemIndex], ...updateFields };
+  }
+
+  res.json({ success: true, quiz: { ...targetQuiz, ...updateFields } });
+});
+
+// 5. POST /api/quizzes/:id/clone — Duplicate/Clone Quiz to Personal Library
+router.post('/:id/clone', authMiddleware, async (req, res) => {
+  const currentUserId = req.user?._id || req.user?.id;
+  const userName = req.user?.name || (req.headers['x-user-name']
+    ? decodeURIComponent(req.headers['x-user-name'])
+    : 'User');
+  const targetId = req.params.id;
+  const isAdmin = req.user?.role === 'admin';
+
+  let sourceQuiz = null;
+  try {
+    if (mongoose.connection.readyState === 1) {
+      sourceQuiz = await Quiz.findOne({ $or: [{ _id: targetId }, { id: targetId }] }).lean();
+    }
+  } catch (e) {}
+
+  if (!sourceQuiz) {
+    sourceQuiz = mockDB.quizzes.find(q => q._id === targetId || q.id === targetId);
+  }
+
+  if (!sourceQuiz) {
+    return res.status(404).json({ success: false, message: 'Quiz not found' });
+  }
+
+  const isOwner = (sourceQuiz.creator === currentUserId || sourceQuiz.userId === currentUserId);
+  const isPublic = Boolean(sourceQuiz.isPublic);
+
+  if (!isOwner && !isPublic && !isAdmin) {
+    return res.status(404).json({ success: false, message: 'Quiz not found' });
+  }
+
+  const newQuizId = `quiz_${uuidv4().slice(0, 8)}`;
+  const uniqueCredentialId = `QF-CR-${uuidv4().slice(0, 6).toUpperCase()}`;
+
+  const clonedQuiz = {
+    _id: newQuizId,
+    id: newQuizId,
+    credentialId: uniqueCredentialId,
+    title: sourceQuiz.title.endsWith('(Copy)') ? sourceQuiz.title : `${sourceQuiz.title} (Copy)`,
+    description: sourceQuiz.description || '',
+    category: sourceQuiz.category || 'General',
+    difficulty: sourceQuiz.difficulty || 'Medium',
+    creator: currentUserId,
+    userId: currentUserId,
+    creatorName: userName,
+    isPublic: false,
+    timeLimit: sourceQuiz.timeLimit || 10,
+    sourceType: sourceQuiz.sourceType || 'manual',
+    bloomLevels: sourceQuiz.bloomLevels || ['Understand'],
+    tags: sourceQuiz.tags || ['Cloned'],
+    views: 0,
+    clones: 0,
+    rating: 5.0,
+    ratingsCount: 1,
+    questions: (sourceQuiz.questions || []).map((q, idx) => ({
+      ...q,
+      id: `q_${uuidv4().slice(0, 6)}_${idx + 1}`
+    })),
+    createdAt: new Date().toISOString()
+  };
+
+  try {
+    if (mongoose.connection.readyState === 1) {
+      await Promise.allSettled([
+        Quiz.create(clonedQuiz),
+        Quiz.updateOne({ _id: sourceQuiz._id }, { $inc: { clones: 1 } })
+      ]);
+    }
+  } catch (err) {
+    console.warn('MongoDB clone Quiz.create warning:', err.message);
+  }
+
+  sourceQuiz.clones = (sourceQuiz.clones || 0) + 1;
+  mockDB.quizzes.unshift(clonedQuiz);
+
+  res.status(201).json({ success: true, quiz: clonedQuiz });
+});
+
+// 6. DELETE /api/quizzes/:id — Delete Quiz with strict ownership check
+router.delete('/:id', authMiddleware, async (req, res) => {
+  const currentUserId = req.user?._id || req.user?.id;
+  const targetId = req.params.id;
+  const isAdmin = req.user?.role === 'admin';
+
+  let targetQuiz = null;
+  try {
+    if (mongoose.connection.readyState === 1) {
+      targetQuiz = await Quiz.findOne({ $or: [{ _id: targetId }, { id: targetId }] }).lean();
+    }
+  } catch (e) {}
+
+  if (!targetQuiz) {
+    targetQuiz = mockDB.quizzes.find(q => q._id === targetId || q.id === targetId);
+  }
+
+  if (!targetQuiz) {
+    return res.status(404).json({ success: false, message: 'Quiz not found' });
+  }
+
+  const isOwner = (targetQuiz.creator === currentUserId || targetQuiz.userId === currentUserId);
+  if (!isOwner && !isAdmin) {
+    return res.status(403).json({ success: false, message: 'Access denied: You do not own this quiz' });
+  }
+
+  const quizTitle = targetQuiz.title || '';
+
+  // 1. Remove Quiz from in-memory Store
   mockDB.quizzes = mockDB.quizzes.filter(q => q._id !== targetId && q.id !== targetId);
 
   // 2. Cascade delete from MongoDB Atlas
@@ -206,12 +392,14 @@ router.delete('/:id', authMiddleware, async (req, res) => {
     if (mongoose.connection.readyState === 1) {
       await Promise.allSettled([
         Quiz.deleteMany({ $or: [{ _id: targetId }, { id: targetId }] }),
-        Attempt.deleteMany({ $or: [{ quizId: targetId }, ...(quizTitle ? [{ quizTitle }] : [])] }),
-        Certificate.deleteMany({ $or: [{ quizId: targetId }, ...(quizTitle ? [{ quizTitle }] : [])] }),
-        Flashcard.deleteMany({ $or: [{ quizId: targetId }, ...(quizTitle ? [{ title: quizTitle }] : [])] })
+        Attempt.deleteMany({ $or: [{ quizId: targetId }, ...(quizTitle ? [{ quizTitle }] : [])], userId: currentUserId }),
+        Certificate.deleteMany({ $or: [{ quizId: targetId }, ...(quizTitle ? [{ quizTitle }] : [])], userId: currentUserId }),
+        Flashcard.deleteMany({ $or: [{ quizId: targetId }, ...(quizTitle ? [{ title: quizTitle }] : [])], userId: currentUserId })
       ]);
     }
-  } catch (err) {}
+  } catch (err) {
+    console.warn('MongoDB cascade delete warning:', err.message);
+  }
 
   res.json({ 
     success: true, 
@@ -219,11 +407,16 @@ router.delete('/:id', authMiddleware, async (req, res) => {
   });
 });
 
-// Record Quiz Attempt with Authoritative Server-Side Evaluation & Automatic Certificate Issuance on Score >= 80%
+// 7. POST /api/quizzes/:id/attempt — Authoritative Server-Side Scoring with authenticated User ownership
 router.post('/:id/attempt', authMiddleware, async (req, res) => {
   const targetId = req.params.id;
-  let quiz = null;
+  const currentUserId = req.user?._id || req.user?.id;
+  const userName = req.user?.name || (req.headers['x-user-name']
+    ? decodeURIComponent(req.headers['x-user-name'])
+    : 'Student');
+  const isAdmin = req.user?.role === 'admin';
 
+  let quiz = null;
   try {
     if (mongoose.connection.readyState === 1) {
       quiz = await Quiz.findOne({ 
@@ -238,10 +431,15 @@ router.post('/:id/attempt', authMiddleware, async (req, res) => {
     );
   }
 
+  if (quiz) {
+    const isOwner = (quiz.creator === currentUserId || quiz.userId === currentUserId);
+    const isPublic = Boolean(quiz.isPublic);
+    if (!isOwner && !isPublic && !isAdmin) {
+      return res.status(404).json({ success: false, message: 'Quiz not found' });
+    }
+  }
+
   const { timeSpent, answers = [], weakTopics = [], quizTitle } = req.body;
-  const rawUserName = req.headers['x-user-name'] ? decodeURIComponent(req.headers['x-user-name']) : (req.user?.name || 'Student');
-  const userId = req.user?._id || req.user?.id || req.headers['x-user-id'] || 'guest_user';
-  const userName = rawUserName || 'Student';
   const effectiveQuizTitle = quiz ? quiz.title : (quizTitle || 'Mastery Assessment');
   const quizCredentialId = quiz ? (quiz.credentialId || `QF-CR-${String(quiz._id || targetId).slice(-6).toUpperCase()}`) : `QF-CR-${String(targetId).slice(-6).toUpperCase()}`;
 
@@ -290,7 +488,7 @@ router.post('/:id/attempt', authMiddleware, async (req, res) => {
     quizId: targetId,
     quizTitle: effectiveQuizTitle,
     category: quiz ? quiz.category : 'General',
-    userId,
+    userId: currentUserId,
     userName,
     score: calculatedScore,
     maxScore: maxPossibleScore,
@@ -312,22 +510,22 @@ router.post('/:id/attempt', authMiddleware, async (req, res) => {
 
   mockDB.attempts.unshift(newAttempt);
 
-  // AUTOMATIC CERTIFICATE ISSUANCE on Score >= 80%
+  // AUTOMATIC CERTIFICATE ISSUANCE on Score >= 80% (Scoped to authenticated user)
   let certificateEarned = false;
   let certificate = null;
 
   if (finalPercentage >= 80) {
     certificateEarned = true;
     
-    // Check if certificate already exists for this user and quiz
     let existingCert = null;
     try {
       if (mongoose.connection.readyState === 1) {
         existingCert = await Certificate.findOne({
+          userId: currentUserId,
           $or: [
-            { userId, quizId: targetId },
-            { userId, quizCredentialId },
-            { userId, quizTitle: effectiveQuizTitle }
+            { quizId: targetId },
+            { quizCredentialId },
+            { quizTitle: effectiveQuizTitle }
           ]
         }).lean();
       }
@@ -335,7 +533,7 @@ router.post('/:id/attempt', authMiddleware, async (req, res) => {
 
     if (!existingCert) {
       existingCert = mockDB.certificates.find(c => 
-        (c.userId === userId) && (c.quizId === targetId || c.quizTitle === effectiveQuizTitle || c.quizCredentialId === quizCredentialId)
+        (c.userId === currentUserId) && (c.quizId === targetId || c.quizTitle === effectiveQuizTitle || c.quizCredentialId === quizCredentialId)
       );
     }
 
@@ -351,7 +549,7 @@ router.post('/:id/attempt', authMiddleware, async (req, res) => {
         certificateId: generatedCertId,
         recipientName: userName,
         recipientEmail: req.user?.email || '',
-        userId: userId,
+        userId: currentUserId,
         quizId: targetId,
         quizCredentialId: quizCredentialId,
         quizTitle: effectiveQuizTitle,

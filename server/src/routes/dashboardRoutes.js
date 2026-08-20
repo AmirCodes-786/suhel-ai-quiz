@@ -36,51 +36,48 @@ function formatStudyTime(totalSeconds) {
   return `${minutes}m`;
 }
 
+// GET /api/dashboard — Calculate statistics exclusively for the authenticated user
 router.get('/', authMiddleware, async (req, res) => {
-  const userId = req.user?._id || req.user?.id || req.headers['x-user-id'];
+  const userId = req.user?._id || req.user?.id;
   const range = req.query.range || '7d';
 
   let userQuizzes = [];
   let userAttempts = [];
   let userFlashcards = [];
   let userCertificates = [];
+  let isDbQueried = false;
 
   // Query MongoDB Atlas live if connected
   try {
     if (mongoose.connection.readyState === 1) {
       const [dbQuizzes, dbAttempts, dbFlashcards, dbCertificates] = await Promise.all([
-        Quiz.find({ $or: [{ creator: userId }, { isPublic: true }] }).sort({ createdAt: -1 }).lean(),
+        Quiz.find({ $or: [{ creator: userId }, { userId: userId }] }).sort({ createdAt: -1 }).lean(),
         Attempt.find({ userId }).sort({ createdAt: -1 }).lean(),
         Flashcard.find({ userId }).sort({ createdAt: -1 }).lean(),
         Certificate.find({ userId }).sort({ createdAt: -1 }).lean()
       ]);
 
-      if (dbQuizzes && dbQuizzes.length > 0) userQuizzes = dbQuizzes;
-      if (dbAttempts && dbAttempts.length > 0) userAttempts = dbAttempts;
-      if (dbFlashcards && dbFlashcards.length > 0) userFlashcards = dbFlashcards;
-      if (dbCertificates && dbCertificates.length > 0) userCertificates = dbCertificates;
+      userQuizzes = dbQuizzes || [];
+      userAttempts = dbAttempts || [];
+      userFlashcards = dbFlashcards || [];
+      userCertificates = dbCertificates || [];
+      isDbQueried = true;
     }
   } catch (err) {
     console.warn('Dashboard MongoDB query warning, falling back to in-memory store:', err.message);
   }
 
-  // Fallback to in-memory store if DB had nothing
-  if (userQuizzes.length === 0) {
-    userQuizzes = mockDB.quizzes.filter(q => q.creator === userId || q.isPublic);
-  }
-  if (userAttempts.length === 0) {
+  // Fallback to in-memory store only if DB is not connected
+  if (!isDbQueried) {
+    userQuizzes = mockDB.quizzes.filter(q => q.creator === userId || q.userId === userId);
     userAttempts = mockDB.attempts.filter(a => a.userId === userId);
-  }
-  if (userFlashcards.length === 0) {
     userFlashcards = mockDB.flashcards.filter(f => f.userId === userId);
-  }
-  if (userCertificates.length === 0) {
     userCertificates = mockDB.certificates.filter(c => c.userId === userId);
   }
 
   const isNewUser = userQuizzes.length === 0 && userAttempts.length === 0;
 
-  // 2. Real Overview Metrics Calculation
+  // 2. Real Overview Metrics Calculation strictly for current user
   let totalScoreSum = 0;
   let totalSeconds = 0;
   let totalAnswered = 0;

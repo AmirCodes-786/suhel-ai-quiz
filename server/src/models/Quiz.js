@@ -30,6 +30,7 @@ const QuizSchema = new mongoose.Schema({
   category: { type: String, default: 'General' },
   difficulty: { type: String, enum: ['Easy', 'Medium', 'Hard', 'Expert', 'Mixed'], default: 'Medium' },
   creator: { type: String, required: true, index: true },
+  userId: { type: String, index: true },
   creatorName: { type: String, default: 'Anonymous' },
   isPublic: { type: Boolean, default: false, index: true },
   timeLimit: { type: Number, default: 10 }, // in minutes
@@ -48,7 +49,7 @@ const QuizSchema = new mongoose.Schema({
 }, { timestamps: true, _id: false });
 
 QuizSchema.index({ creator: 1, createdAt: -1 });
+QuizSchema.index({ userId: 1, createdAt: -1 });
 QuizSchema.index({ category: 1 });
-QuizSchema.index({ credentialId: 1 });
 
 module.exports = mongoose.model('Quiz', QuizSchema);

@@ -9,10 +9,10 @@ const { v4: uuidv4 } = require('uuid');
 // Issue new Certificate (Manual / Direct)
 router.post('/issue', authMiddleware, async (req, res) => {
   const { quizId, quizTitle, score, recipientName, skills, quizCredentialId } = req.body;
-  const userId = req.user?.id || req.user?._id || req.headers['x-user-id'] || 'guest_user';
-  const userName = req.headers['x-user-name']
+  const userId = req.user?._id || req.user?.id;
+  const userName = req.user?.name || (req.headers['x-user-name']
     ? decodeURIComponent(req.headers['x-user-name'])
-    : (req.user?.name || recipientName || 'Student');
+    : (recipientName || 'Student'));
   const userEmail = req.user?.email || '';
 
   const numericScore = Number(score) || 0;
@@ -28,10 +28,11 @@ router.post('/issue', authMiddleware, async (req, res) => {
   try {
     if (mongoose.connection.readyState === 1) {
       existing = await Certificate.findOne({
+        userId,
         $or: [
-          { userId, quizId },
-          { userId, quizCredentialId },
-          { userId, quizTitle }
+          { quizId },
+          { quizCredentialId },
+          { quizTitle }
         ]
       }).lean();
     }
@@ -76,7 +77,7 @@ router.post('/issue', authMiddleware, async (req, res) => {
   res.status(201).json({ success: true, certificate: newCert });
 });
 
-// Verify Certificate by Code or Quiz Credential ID (Public)
+// Verify Certificate by Code or Quiz Credential ID (Public verification)
 router.get('/verify/:code', async (req, res) => {
   const code = (req.params.code || '').trim();
   const upperCode = code.toUpperCase();
@@ -131,30 +132,32 @@ router.get('/verify/:code', async (req, res) => {
   });
 });
 
-// Get User Certificates (Protected)
+// Get User Certificates (Protected — strictly authenticated user)
 router.get('/my-certificates', authMiddleware, async (req, res) => {
-  const userId = req.user?.id || req.user?._id || req.headers['x-user-id'];
+  const userId = req.user?._id || req.user?.id;
   let certs = [];
+  let isDbQueried = false;
 
   try {
     if (mongoose.connection.readyState === 1) {
-      certs = await Certificate.find({ 
-        $or: [{ userId }, { userId: 'guest_user' }] 
-      }).sort({ createdAt: -1 }).lean();
+      certs = await Certificate.find({ userId }).sort({ createdAt: -1 }).lean();
+      isDbQueried = true;
     }
   } catch (e) {}
 
-  if (!certs || certs.length === 0) {
-    certs = mockDB.certificates.filter(c => c.userId === userId || c.userId === 'guest_user' || !c.userId);
+  if (!isDbQueried) {
+    certs = mockDB.certificates.filter(c => c.userId === userId);
   }
 
-  res.json({ success: true, count: certs.length, certificates: certs });
+  res.json({ success: true, count: (certs || []).length, certificates: certs || [] });
 });
 
-// Get Certificate by ID (Protected)
+// Get Certificate by ID (Protected — only owner or admin)
 router.get('/:id', authMiddleware, async (req, res) => {
+  const userId = req.user?._id || req.user?.id;
   const targetId = req.params.id;
   const upperId = targetId.toUpperCase();
+  const isAdmin = req.user?.role === 'admin';
 
   let cert = null;
   try {
@@ -172,7 +175,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
 
   if (!cert) {
     cert = mockDB.certificates.find(c => 
-      c.certificateId.toUpperCase() === upperId ||
+      (c.certificateId && c.certificateId.toUpperCase() === upperId) ||
       (c.quizCredentialId && c.quizCredentialId.toUpperCase() === upperId) ||
       c._id === targetId ||
       c.id === targetId
@@ -180,6 +183,10 @@ router.get('/:id', authMiddleware, async (req, res) => {
   }
 
   if (!cert) {
+    return res.status(404).json({ success: false, message: 'Certificate not found' });
+  }
+
+  if (cert.userId && cert.userId !== userId && !isAdmin) {
     return res.status(404).json({ success: false, message: 'Certificate not found' });
   }
 
