@@ -514,13 +514,13 @@ export default function FlashcardStudio() {
       {/* Advanced AI Deck Generator Modal */}
       <AnimatePresence>
         {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsModalOpen(false)}
-              className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs"
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs"
             />
 
             <motion.div
@@ -528,130 +528,136 @@ export default function FlashcardStudio() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: shouldReduceMotion ? 1 : 0.96, y: shouldReduceMotion ? 0 : 8 }}
               transition={{ duration: 0.15 }}
-              className="relative w-full max-w-lg rounded-2xl border border-surface-border bg-white p-6 shadow-2xl z-10 space-y-5"
+              className="relative w-full max-w-lg max-h-[90vh] flex flex-col rounded-2xl border border-surface-border bg-white shadow-2xl z-10 overflow-hidden my-auto"
             >
-              <div className="flex items-center justify-between border-b border-surface-border pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+              {/* Sticky Header */}
+              <div className="flex items-center justify-between border-b border-surface-border p-4 sm:px-6 sm:py-4 shrink-0 bg-white">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
                     <Sparkles className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-slate-900">Generate AI Flashcards</h3>
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900">Generate AI Flashcards</h3>
                     <p className="text-[11px] text-slate-500">Non-repetitive, randomized active recall deck</p>
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+                  aria-label="Close modal"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <form onSubmit={handleGenerateDeck} className="space-y-4">
-                {/* Topic Input */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-800 mb-1">
-                    Topic / Subject <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newTopic}
-                    onChange={(e) => setNewTopic(e.target.value)}
-                    placeholder="e.g. Constitutional Law, Enzyme Kinetics, Transformers"
-                    className="w-full p-2.5 rounded-lg border border-surface-border text-xs focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                  />
+              {/* Form with Scrollable Content and Sticky Footer */}
+              <form onSubmit={handleGenerateDeck} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                <div className="p-4 sm:p-6 overflow-y-auto space-y-4 text-slate-800 flex-1">
+                  {/* Topic Input */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-800 mb-1">
+                      Topic / Subject <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newTopic}
+                      onChange={(e) => setNewTopic(e.target.value)}
+                      placeholder="e.g. Constitutional Law, Enzyme Kinetics, Transformers"
+                      className="w-full p-2.5 rounded-lg border border-surface-border text-xs focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary placeholder:text-slate-400"
+                    />
 
-                  {/* Suggestion Chips */}
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {TOPIC_SUGGESTIONS.map((sug) => (
-                      <button
-                        key={sug}
-                        type="button"
-                        onClick={() => setNewTopic(sug)}
-                        className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 hover:bg-primary/10 hover:text-primary transition-colors"
-                      >
-                        + {sug}
-                      </button>
-                    ))}
+                    {/* Suggestion Chips */}
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {TOPIC_SUGGESTIONS.map((sug) => (
+                        <button
+                          key={sug}
+                          type="button"
+                          onClick={() => setNewTopic(sug)}
+                          className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 hover:bg-primary/10 hover:text-primary transition-colors border border-transparent hover:border-primary/20"
+                        >
+                          + {sug}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Cognitive Depth Dimension */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                      Cognitive Depth Focus
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {DEPTH_FOCUS_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setDepthFocus(opt.label)}
+                          className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                            depthFocus === opt.label
+                              ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                              : 'border-surface-border bg-white hover:bg-slate-50'
+                          }`}
+                        >
+                          <p className="text-xs font-semibold text-slate-900">{opt.label.split('(')[0].trim()}</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5 leading-snug line-clamp-2">{opt.desc}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Card Count Selector */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                      Deck Size ({cardCount} Cards)
+                    </label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[5, 8, 12, 16].map((count) => (
+                        <button
+                          key={count}
+                          type="button"
+                          onClick={() => setCardCount(count)}
+                          className={`py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                            cardCount === count
+                              ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                              : 'border-surface-border bg-white text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          {count} Cards
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Optional Custom Notes */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-800 mb-1">
+                      Custom Notes / Context <span className="text-slate-400 font-normal">(Optional)</span>
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={customText}
+                      onChange={(e) => setCustomText(e.target.value)}
+                      placeholder="Paste specific lecture notes, documentation, or syllabus snippets..."
+                      className="w-full p-2.5 rounded-lg border border-surface-border text-xs focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-none placeholder:text-slate-400"
+                    />
                   </div>
                 </div>
 
-                {/* Cognitive Depth Dimension */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-800 mb-1">
-                    Cognitive Depth Focus
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {DEPTH_FOCUS_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => setDepthFocus(opt.label)}
-                        className={`p-2.5 rounded-xl border text-left transition-all ${
-                          depthFocus === opt.label
-                            ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                            : 'border-surface-border bg-white hover:bg-slate-50'
-                        }`}
-                      >
-                        <p className="text-xs font-semibold text-slate-900">{opt.label.split('(')[0]}</p>
-                        <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">{opt.desc}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Card Count Selector */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-800 mb-1">
-                    Deck Size ({cardCount} Cards)
-                  </label>
-                  <div className="flex items-center gap-2">
-                    {[5, 8, 12, 16].map((count) => (
-                      <button
-                        key={count}
-                        type="button"
-                        onClick={() => setCardCount(count)}
-                        className={`flex-1 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
-                          cardCount === count
-                            ? 'bg-slate-900 text-white border-slate-900'
-                            : 'border-surface-border bg-white text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        {count} Cards
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Optional Custom Notes */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-800 mb-1">
-                    Custom Notes / Context <span className="text-slate-400 font-normal">(Optional)</span>
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={customText}
-                    onChange={(e) => setCustomText(e.target.value)}
-                    placeholder="Paste specific lecture notes, documentation, or syllabus snippets..."
-                    className="w-full p-2.5 rounded-lg border border-surface-border text-xs focus:outline-none focus:border-primary resize-none"
-                  />
-                </div>
-
-                {/* Modal Footer */}
-                <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-surface-border">
+                {/* Sticky Modal Footer */}
+                <div className="p-3 sm:px-6 sm:py-3.5 border-t border-surface-border bg-slate-50/90 shrink-0 flex items-center justify-end gap-2.5">
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="px-4 py-2 rounded-lg border border-surface-border text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    className="px-3.5 py-2 rounded-lg border border-surface-border text-xs font-semibold text-slate-700 hover:bg-white transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isGenerating || !newTopic.trim()}
-                    className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-xs font-semibold disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
+                    className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm transition-all hover:scale-[1.01] active:scale-[0.99]"
                   >
                     {isGenerating ? (
                       <>
