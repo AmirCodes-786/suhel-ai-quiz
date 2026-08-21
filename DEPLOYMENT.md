@@ -48,7 +48,7 @@ Host your full-stack app for free:
    ```env
    VITE_API_URL=https://your-render-app.onrender.com/api
    VITE_SOCKET_URL=https://your-render-app.onrender.com
-   VITE_CLERK_PUBLISHABLE_KEY=pk_test_YW1wbGUtZ29yaWxsYS03MjAwLmNsZXJrLmFjY291bnRzLmRldiQ
+   VITE_CLERK_PUBLISHABLE_KEY=pk_test_your_publishable_key
    ```
 
 5. Click **Deploy**.
